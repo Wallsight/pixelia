@@ -56,13 +56,14 @@ await send('Page.enable');
 let n = 0;
 for (const q of queries) {
   n++;
-  await send('Page.navigate', { url: `http://127.0.0.1:5173/?shot&${q}` });
+  // URL=https://... checks a deployed build instead (ready = start button enabled).
+  await send('Page.navigate', { url: `${process.env.URL ?? 'http://127.0.0.1:5173/'}?shot&${q}` });
   let ready = false;
   const t0 = Date.now();
   while (Date.now() - t0 < 60000) {
     await sleep(500);
-    const r = await send('Runtime.evaluate', { expression: 'document.title' });
-    if (r.result?.result?.value === 'READY') { ready = true; break; }
+    const r = await send('Runtime.evaluate', { expression: "document.title === 'READY' || document.getElementById('start')?.disabled === false" });
+    if (r.result?.result?.value === true) { ready = true; break; }
   }
   await sleep(Number(process.env.SETTLE ?? 4000)); // let remaining chunks stream in
   // HOLD="KeyW+ShiftLeft:4000" holds keys (needs &walk in the query), then reports the position.

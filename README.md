@@ -32,6 +32,7 @@ npm ci
 npm run dev      # http://127.0.0.1:5173
 npm run build
 npm test
+npm run deploy   # derleyip gh-pages dalına yayınlar
 ```
 
 Three.js dışında bağımlılık yoktur; dokular, modeller ve sesler çalışma anında üretilir.

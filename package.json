@@ -12,7 +12,8 @@
     "check:deps": "npm outdated; npm audit --audit-level=low",
     "test": "node tools/run.mjs tools/physics-test.ts",
     "tool:map": "node tools/run.mjs tools/mapgen.ts",
-    "tool:shot": "node tools/shot.mjs"
+    "tool:shot": "node tools/shot.mjs",
+    "deploy": "node tools/deploy.mjs"
   },
   "dependencies": {
     "three": "0.187.0"
