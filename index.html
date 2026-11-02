@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:5173 ws://localhost:5173; worker-src 'self' blob:; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Pixelia</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div id="crosshair"></div>
+    <pre id="debug"></pre>
+    <div id="overlay">
+      <div class="panel">
+        <h1>PIXELIA</h1>
+        <p id="status" class="status">Dünya oluşturuluyor…</p>
+        <button id="start" disabled>Keşfe Başla</button>
+        <table class="keys">
+          <tr><td>Fare</td><td>Etrafa bak</td></tr>
+          <tr><td>W A S D</td><td>Yürü</td></tr>
+          <tr><td>Shift</td><td>Koş</td></tr>
+          <tr><td>Boşluk</td><td>Zıpla / yüz</td></tr>
+          <tr><td>M</td><td>Harita</td></tr>
+          <tr><td>T</td><td>Zamanı hızlandır</td></tr>
+          <tr><td>N / B</td><td>Ses / müzik aç-kapa</td></tr>
+          <tr><td>F</td><td>Uçma modu (geliştirici)</td></tr>
+          <tr><td>F3</td><td>Bilgi paneli</td></tr>
+          <tr><td>Esc</td><td>Duraklat</td></tr>
+        </table>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

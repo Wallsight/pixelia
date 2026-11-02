@@ -1,0 +1,28 @@
+{
+  "name": "pixelia",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "audit": "npm audit --audit-level=low",
+    "check:deps": "npm outdated; npm audit --audit-level=low",
+    "test": "node tools/run.mjs tools/physics-test.ts",
+    "tool:map": "node tools/run.mjs tools/mapgen.ts",
+    "tool:shot": "node tools/shot.mjs"
+  },
+  "dependencies": {
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.187.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.5"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}
