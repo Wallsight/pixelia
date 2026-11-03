@@ -47,6 +47,8 @@ export class PlayerController {
   private bobAmount = 0;
   private stepSmooth = 0;
   private frozen = true;
+  /** Extra solid cells that are not blocks (the great dragon's body). */
+  extraSolid: ((x: number, y: number, z: number) => boolean) | null = null;
   /** Extent of the solid cells found by the last collides() call. */
   private hitTop = 0;
   private hitBottom = 0;
@@ -126,7 +128,7 @@ export class PlayerController {
   private cellTop(x: number, y: number, z: number): number {
     const b = this.world.getBlock(x, y, z);
     if (b === -1) return y + 1;
-    if (COLLIDES[b] !== 1) return -Infinity;
+    if (COLLIDES[b] !== 1) return this.extraSolid?.(x, y, z) ? y + 1 : -Infinity;
     return y + HEIGHT8[b] / 8;
   }
 

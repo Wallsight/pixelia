@@ -578,7 +578,7 @@ function dragonLair(pb: PlanBuilder): void {
   for (let z = -30; z <= 24; z++) for (let x = -19; x <= 19; x++) {
     const e = Math.hypot(x / 17, (z + 3) / 26);
     if (e > 1) continue;
-    const top = Math.round((1 - e * e) * (LAIR_BED + 1) + (pb.noise(x, 3, z, 3) - 0.5) * 1.6);
+    const top = Math.round((1 - e * e) * (LAIR_BED + 1) + (pb.noise(x, 3, z, 3) - 0.5) * 0.8);
     for (let y = 1; y <= top; y++) pb.set(x, y, z, y === top && pb.noise(x, y, z, 4) < 0.04 ? B.CRATE : B.GOLD);
   }
   for (const [x, z] of [[-13, -12], [14, 5], [-10, 15], [11, -22]]) pb.set(x, LAIR_BED, z, B.LANTERN);

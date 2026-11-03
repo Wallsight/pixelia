@@ -106,6 +106,8 @@ const subtitle = new Subtitle();
 creatures.wyrm.onSpeak = (who, text, sec, asleep) => subtitle.show(who, text, sec, asleep);
 creatures.wyrm.onSound = (ev, at, text) => sound.wyrm(ev, at, text);
 creatures.wyrm.context = () => ({ found: legendBoard?.foundCount ?? 0, flying: player.flying });
+// Its body is solid: no walking through it, but you can climb onto its back.
+player.extraSolid = (x, y, z) => creatures.wyrm.solid(x, y, z);
 const camFwd = new THREE.Vector3(), camUp = new THREE.Vector3();
 
 // ------------------------------------------------------------ spawn
@@ -356,7 +358,12 @@ function frame(): void {
   }
   player.update(dt);
   if (touchMode) touch?.syncFly();
-  if (spawned && !worldMap.open) creatures.update(dt, player.position.x, player.position.z, daynight.night, camera.position);
+  if (spawned && !worldMap.open) {
+    creatures.update(dt, player.position.x, player.position.z, daynight.night, camera.position);
+    // The great dragon lifting its head under the player carries them up.
+    const p = player.position, ly = creatures.wyrm.liftOut(p.x - 0.3, p.x + 0.3, p.y, p.z - 0.3, p.z + 0.3, 1.8);
+    if (ly !== p.y) { p.y = ly; player.velocity.y = Math.max(0, player.velocity.y); }
+  }
   if (spawned) discovery.update(dt, player.position.x, player.position.z);
   legendBoard?.update(dt);
   subtitle.update(dt);

@@ -1057,6 +1057,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost {
   }
 
   say(c: Creature, text: string, sec?: number): void { this.npcs.bubbles.say(c, text, sec); }
+  killAnimal(p: Creature): void { this.kill(p); }
   sound(ev: NightSound, c: Creature): void { this.onSound?.(ev, c); }
   alarm(raider: Creature): void { this.npcs.alarm(raider); }
   hit(target: Creature, dmg: number, from: Creature): void { this.nightDir.hit(target, dmg, from); }

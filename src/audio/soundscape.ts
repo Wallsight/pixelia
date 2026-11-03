@@ -158,11 +158,12 @@ export class Soundscape {
   }
 
   /** The great dragon: snores, the eye opening, the yawn of fire, its voice. */
-  wyrm(ev: 'snore' | 'stir' | 'yawn' | 'voice', at: [number, number, number], text?: string): void {
+  wyrm(ev: 'snore' | 'stir' | 'yawn' | 'voice' | 'burn', at: [number, number, number], text?: string): void {
     const e = this.engine;
     if (ev === 'snore') this.play(at, 'sfx', 18, 0.3, 170, 1, (o, t) => X.snore(e, o, t, 3));
     else if (ev === 'stir') this.play(at, 'sfx', 14, 0.3, 120, 1, (o, t) => X.eyeOpen(e, o, t));
     else if (ev === 'yawn') this.play(at, 'sfx', 24, 0.4, 260, 1, (o, t) => X.roar(e, o, t, 2.6));
+    else if (ev === 'burn') this.play(at, 'sfx', 20, 0.35, 220, 1, (o, t) => Math.max(X.roar(e, o, t, 2), X.crackle(e, o, t + 0.2, 2, 30)));
     else this.play(at, 'voice', 20, 0.25, 140, 1, (o, t) => X.wyrmVoice(e, o, t, text ?? ''));
   }
 
