@@ -69,6 +69,9 @@ export interface Listener {
   sample: ColumnSample | null;
 }
 
+/** Radius round the city centre (houses plus the farm belt) where only calm sounds play. */
+const CITY_QUIET = 120;
+
 export class Soundscape {
   readonly engine = new AudioEngine();
   private music: Music;
@@ -104,6 +107,8 @@ export class Soundscape {
   private dragons = new Map<Creature, DragonAudio>();
   private crickets: Cricket[] = [];
   private burnTimer = 0;
+  /** The listener is in the city: only calm sounds (see play) are heard there. */
+  private inCity = false;
 
   constructor(private world: World, private terrain: Terrain, private creatures: Creatures) {
     this.music = new Music(this.engine);
@@ -115,9 +120,14 @@ export class Soundscape {
 
   // ------------------------------------------------------------ one-shots
 
-  private play(at: [number, number, number] | null, bus: Bus, ref: number, wet: number, maxD: number, vol: number, fn: (out: AudioNode, t: number) => number): void {
+  /**
+   * Positioned (or flat, at = null) one-shot. Inside the city only sounds marked
+   * `calm` (birds, the fountain, the bard's lute) and the player's own sounds play.
+   */
+  private play(at: [number, number, number] | null, bus: Bus, ref: number, wet: number, maxD: number, vol: number, fn: (out: AudioNode, t: number) => number, calm = false): void {
     const e = this.engine;
     if (!e.ready || this.active > 72) return;
+    if (this.inCity && at && !calm) return;
     let input: GainNode, panner: PannerNode | null = null;
     if (at) {
       if (e.dist(at[0], at[1], at[2]) > maxD) return;
@@ -144,7 +154,7 @@ export class Soundscape {
     if (ev === 'say' && c.npc && text && c.npc.role === 'bard' && text.includes('♪')) {
       // The bard's songs sound as a lute phrase rather than speech.
       at[1] = c.y + 1.1 * c.scale;
-      this.play(at, 'voice', 3, 0.12, 36, 1, (o, t) => X.lute(e, o, t, 196, 12));
+      this.play(at, 'voice', 3, 0.12, 36, 1, (o, t) => X.lute(e, o, t, 196, 12), true);
     } else if (ev === 'say' && c.npc && text && c.npc.role === 'crier' && c.npc.li === 0) {
       at[1] = c.y + 1 * c.scale;
       this.play(at, 'sfx', 3, 0.1, 50, 0.9, (o, t) => { X.bell(e, o, t, 1320, 0.5); return X.bell(e, o, t + 0.45, 1100, 0.5); });
@@ -249,6 +259,8 @@ export class Soundscape {
     if (this.envTimer <= 0) { this.envTimer = 0.35; this.sampleEnv(p.x, p.y, p.z, L); }
     this.townTimer -= dt;
     if (this.townTimer <= 0) { this.townTimer = 3; this.findTowns(p.x, p.z); }
+    const city = this.terrain.city;
+    this.inCity = !!city && Math.hypot(p.x - city.x, p.z - city.z) < CITY_QUIET;
 
     this.beds(dt, L, submerged);
     this.player(dt, L);
@@ -393,13 +405,13 @@ export class Soundscape {
     // Songbirds by day, more of them among trees; nearby flocks chatter too.
     if (BIRDY.has(biome) && chance(day * (0.2 + env.leaves * 1.8))) {
       const v = Math.floor(Math.random() * 4), base = [3200, 2600, 3500, 4100][v] * rnd(0.88, 1.12);
-      this.play(this.around(L, 8, 30, 2, 9), 'amb', 5, 0.2, 60, 0.6, (o, t) => X.chirp(e, o, t, v, base));
+      this.play(this.around(L, 8, 30, 2, 9), 'amb', 5, 0.2, 60, 0.6, (o, t) => X.chirp(e, o, t, v, base), true);
     }
     if (day > 0.3) {
       for (const b of this.creatures.live('bird')) {
         if (Math.random() < dt * 0.04 && Math.abs(b.x - L.pos.x) < 35 && Math.abs(b.z - L.pos.z) < 35) {
           const v = Math.floor(b.seed) % 4;
-          this.play([b.x, b.y, b.z], 'amb', 4, 0.15, 45, 0.5, (o, t) => X.chirp(e, o, t, v, 3000 + (b.seed % 900)));
+          this.play([b.x, b.y, b.z], 'amb', 4, 0.15, 45, 0.5, (o, t) => X.chirp(e, o, t, v, 3000 + (b.seed % 900)), true);
         }
       }
     }
@@ -442,7 +454,7 @@ export class Soundscape {
     }
     const fa = this.fountainAt;
     if (fa && chance(5) && e.dist(fa[0], fa[1], fa[2]) < 30) {
-      this.play([fa[0] + rnd(-1.5, 1.5), fa[1], fa[2] + rnd(-1.5, 1.5)], 'amb', 2, 0.1, 30, 0.2, (o, t) => X.drip(e, o, t, rnd(800, 1800), 0.25));
+      this.play([fa[0] + rnd(-1.5, 1.5), fa[1], fa[2] + rnd(-1.5, 1.5)], 'amb', 2, 0.1, 30, 0.2, (o, t) => X.drip(e, o, t, rnd(800, 1800), 0.25), true);
     }
 
     // Lava bubbling.
@@ -539,7 +551,7 @@ export class Soundscape {
         if (d.snore <= 0) { d.snore = rnd(4.2, 5.5); this.play(at, 'sfx', 8, 0.15, 90, 0.9, (o, t) => X.snore(e, o, t, c.scale)); }
       }
       // Fire breath: a roaring noise loop that follows the mouth.
-      if (mode === 'breathe' && !d.fire && dist < 260) d.fire = this.startFire();
+      if (mode === 'breathe' && !d.fire && dist < 260 && !this.inCity) d.fire = this.startFire();
       if (d.fire) {
         const m = [c.x + Math.sin(c.yaw) * 5 * c.scale, c.y + 2 * c.scale, c.z + Math.cos(c.yaw) * 5 * c.scale];
         setPannerPos(d.fire.panner, m[0], m[1], m[2], e.now);
