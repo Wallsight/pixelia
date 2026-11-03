@@ -418,18 +418,23 @@ void main() {
   vec3 albedo = vColor; // already linear (THREE.Color)
   vec3 n = normalize(vNormal);
   vec3 col = shade(albedo, n, vWorld, 1.0, -1.0) + albedo * vGlow * 2.5;
+#ifdef TRANSLUCENT
+  gl_FragColor = vec4(applyFog(col, vWorld), 0.5);
+#else
   gl_FragColor = vec4(applyFog(col, vWorld), 1.0);
+#endif
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 #endif
 }
 `;
 
-/** Lit, GPU-animated creature material; `depth` builds the shadow-pass variant. */
-export function createCreatureMaterial(env: EnvUniforms, shadows: boolean, depth = false): THREE.ShaderMaterial {
+/** Lit, GPU-animated creature material; `depth` builds the shadow-pass variant, `translucent` a see-through one (ghosts). */
+export function createCreatureMaterial(env: EnvUniforms, shadows: boolean, depth = false, translucent = false): THREE.ShaderMaterial {
   const defines: Record<string, string> = {};
   if (shadows && !depth) defines.USE_SHADOWS = '';
   if (depth) defines.DEPTH_ONLY = '';
+  if (translucent) defines.TRANSLUCENT = '';
   return new THREE.ShaderMaterial({
     uniforms: env as unknown as Record<string, THREE.IUniform>,
     vertexShader: creatureVertex,
@@ -437,5 +442,7 @@ export function createCreatureMaterial(env: EnvUniforms, shadows: boolean, depth
     defines,
     side: depth ? THREE.DoubleSide : THREE.FrontSide,
     colorWrite: !depth,
+    transparent: translucent,
+    depthWrite: !translucent,
   });
 }

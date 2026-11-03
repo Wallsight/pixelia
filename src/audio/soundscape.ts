@@ -72,6 +72,14 @@ export interface Listener {
 /** Radius round the city centre (houses plus the farm belt) where only calm sounds play. */
 const CITY_QUIET = 120;
 
+/** Night monsters and battle: [reference distance, max distance, volume, recipe]. */
+const NIGHT_SOUNDS: Record<string, [number, number, number, (e: AudioEngine, o: AudioNode, t: number) => number]> = {
+  groan: [4, 45, 0.7, X.groan], rattle: [3, 35, 0.6, X.rattle], growl: [6, 60, 0.9, X.growl], hiss: [3, 30, 0.6, X.hiss],
+  wail: [6, 60, 0.6, X.wail], swing: [3, 35, 0.5, X.swing], hit: [3, 40, 0.8, X.thud], clang: [3, 45, 0.6, X.clang],
+  twang: [3, 40, 0.6, X.twang], zap: [4, 50, 0.6, X.zap], poof: [4, 45, 0.7, X.poof],
+  heal: [4, 40, 0.6, (e, o, t) => X.chime(e, o, t, [880, 1175, 1568], 0.08, 0.12)],
+};
+
 export class Soundscape {
   readonly engine = new AudioEngine();
   private music: Music;
@@ -165,6 +173,10 @@ export class Soundscape {
         : r === 'merchant' ? 150 + k * 50 : k < 0.5 ? 108 + k * 70 : 175 + (k - 0.5) * 120;
       at[1] = c.y + 1.6 * c.scale;
       this.play(at, 'voice', 3, 0.1, 32, 0.9, (o, t) => X.babble(e, o, t, text, f0));
+    } else if (NIGHT_SOUNDS[ev]) {
+      at[1] = c.y + 1.2 * c.scale;
+      const [ref, maxD, vol, fn] = NIGHT_SOUNDS[ev];
+      this.play(at, 'sfx', ref, 0.2, maxD, vol, (o, t) => fn(e, o, t));
     } else if (ev === 'roar') {
       at[1] = c.y + 3 * c.scale;
       this.play(at, 'sfx', 30, 0.4, 500, 1, (o, t) => X.roar(e, o, t, c.scale));

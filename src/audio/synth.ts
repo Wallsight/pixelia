@@ -367,6 +367,92 @@ export function snore(e: AudioEngine, out: AudioNode, t: number, scale: number):
 
 // ------------------------------------------------------------------ town
 
+// ------------------------------------------------------------------ night monsters and battle
+
+/** Zombie groan: a low, wavering sawtooth through a vowel-ish band. */
+export function groan(e: AudioEngine, out: AudioNode, t: number): number {
+  const f0 = rnd(70, 95), dur = rnd(1.1, 1.7);
+  const o = e.osc('sawtooth', f0);
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.linearRampToValueAtTime(f0 * 1.15, t + dur * 0.4);
+  o.frequency.linearRampToValueAtTime(f0 * 0.8, t + dur);
+  const f = e.filter('bandpass', rnd(380, 520), 2.5);
+  const g = e.gain();
+  o.connect(f); f.connect(g); g.connect(out);
+  const end = ad(g.gain, t, 0.25, 0.5, dur);
+  o.start(t); o.stop(end + 0.02);
+  return end;
+}
+
+/** Bones clattering. */
+export function rattle(e: AudioEngine, out: AudioNode, t: number): number {
+  return grains(e, out, t, 9, 0.45, 1800, 4200, 0.45, 0.025);
+}
+
+/** Deep growl (demons, trolls). */
+export function growl(e: AudioEngine, out: AudioNode, t: number): number {
+  const dur = rnd(0.8, 1.3);
+  burst(e, out, t, 'brown', 'lowpass', 260, 0.9, 0.12, 0.7, dur, 160);
+  return tone(e, out, t, 'sawtooth', rnd(48, 62), 40, 0.15, 0.18, dur);
+}
+
+/** Spider hiss. */
+export function hiss(e: AudioEngine, out: AudioNode, t: number): number {
+  return burst(e, out, t, 'white', 'highpass', 3800, 0.8, 0.05, 0.22, rnd(0.4, 0.7));
+}
+
+/** Ghostly wail: a sliding sine with slow vibrato. */
+export function wail(e: AudioEngine, out: AudioNode, t: number): number {
+  const f0 = rnd(420, 560), dur = 1.8;
+  const o = e.osc('sine', f0), lfo = e.osc('sine', 5), lg = e.gain(f0 * 0.03);
+  lfo.connect(lg); lg.connect(o.frequency);
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.linearRampToValueAtTime(f0 * 1.35, t + dur * 0.4);
+  o.frequency.linearRampToValueAtTime(f0 * 0.8, t + dur);
+  const g = e.gain();
+  o.connect(g); g.connect(out);
+  const end = ad(g.gain, t, 0.5, 0.16, dur);
+  o.start(t); lfo.start(t); o.stop(end + 0.02); lfo.stop(end + 0.02);
+  return end;
+}
+
+/** A weapon whooshing through the air. */
+export function swing(e: AudioEngine, out: AudioNode, t: number): number {
+  return burst(e, out, t, 'white', 'bandpass', 700, 1.4, 0.04, 0.25, 0.14, 2600);
+}
+
+/** A blow landing on a body. */
+export function thud(e: AudioEngine, out: AudioNode, t: number): number {
+  burst(e, out, t, 'pink', 'lowpass', 700, 0.8, 0.002, 0.5, 0.12);
+  return tone(e, out, t, 'sine', 150, 70, 0.002, 0.35, 0.14);
+}
+
+/** Steel on steel (the warrior's armour or shield). */
+export function clang(e: AudioEngine, out: AudioNode, t: number): number {
+  let end = t;
+  for (const [f, a, d] of [[1650, 0.2, 0.5], [2410, 0.14, 0.35], [3720, 0.08, 0.25]]) end = Math.max(end, tone(e, out, t, 'sine', f, f * 0.995, 0.001, a, d));
+  burst(e, out, t, 'white', 'bandpass', 4000, 1, 0.001, 0.25, 0.03);
+  return end;
+}
+
+/** Bowstring release. */
+export function twang(e: AudioEngine, out: AudioNode, t: number): number {
+  burst(e, out, t, 'white', 'highpass', 2500, 0.8, 0.001, 0.12, 0.05);
+  return tone(e, out, t, 'triangle', 230, 205, 0.002, 0.3, 0.22);
+}
+
+/** A magic bolt: a falling shimmer. */
+export function zap(e: AudioEngine, out: AudioNode, t: number): number {
+  tone(e, out, t, 'sine', 1400, 380, 0.01, 0.18, 0.4);
+  tone(e, out, t + 0.02, 'triangle', 2100, 600, 0.01, 0.08, 0.35);
+  return burst(e, out, t, 'white', 'bandpass', 3000, 2, 0.01, 0.08, 0.3, 900);
+}
+
+/** A monster dissolving into smoke or bones. */
+export function poof(e: AudioEngine, out: AudioNode, t: number): number {
+  return burst(e, out, t, 'pink', 'lowpass', 500, 0.7, 0.02, 0.45, 0.6, 180);
+}
+
 /** A lute phrase: plucked triangle notes on a minor pentatonic, with a soft second string. */
 export function lute(e: AudioEngine, out: AudioNode, t: number, root: number, notes: number): number {
   const scale = [0, 3, 5, 7, 10, 12, 15];

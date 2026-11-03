@@ -14,11 +14,12 @@ import * as M from './models';
 import { NpcDirector, type NpcHost, type NpcState, type Role } from './npcs';
 import { FireFx } from '../render/fire';
 import { hash01 } from '../engine/noise';
+import { NightDirector, type Fighter, type FighterKind, type NightHost, type NightSound } from './night';
 
 const TAU = Math.PI * 2;
 const DESPAWN = 104;
 
-type Habitat = 'ground' | 'air' | 'water' | 'flutter' | 'dragon' | 'npc';
+type Habitat = 'ground' | 'air' | 'water' | 'flutter' | 'dragon' | 'npc' | 'monster' | 'hero';
 
 interface SpeciesDef {
   name: string;
@@ -33,6 +34,8 @@ interface SpeciesDef {
   shadow: boolean;
   /** Only spawn in daylight (1), at night (-1) or always (0). */
   time: number;
+  /** Drawn see-through (ghosts). */
+  translucent?: boolean;
 }
 
 const GREEN = [BIOME.PLAINS, BIOME.FOREST, BIOME.BIRCH_FOREST];
@@ -49,6 +52,16 @@ const SPECIES: SpeciesDef[] = [
   ...([['villager', M.villager, 40], ['farmer', M.farmer, 16], ['merchant', M.merchant, 20], ['elder', M.elder, 12],
     ['guard', M.guard, 10], ['kid', M.kid, 20], ['traveler', M.traveler, 6], ['bard', M.bard, 2], ['crier', M.crier, 2]] as Array<[Role, () => Box[], number]>).map(([name, model, max]): SpeciesDef => ({
     name, model, max, habitat: 'npc', biomes: [], group: [1, 1], speed: 1.3, scale: [1, 1], tints: ['#ffffff'], shadow: true, time: 0,
+  })),
+  // Night monsters and adventurers (spawned by the night director).
+  ...([['skeleton', M.skeleton, 12, ['#ffffff']], ['zombie', M.zombie, 12, ['#5a6a7a', '#6a5a4a', '#4a5a4a', '#7a6a6a']],
+    ['demon', M.demon, 6, ['#ffffff']], ['spider', M.spider, 8, ['#3a3038', '#2a2a2e', '#4a3a2e']], ['ghost', M.ghost, 8, ['#ffffff']],
+    ['troll', M.troll, 4, ['#c8c8b8', '#b8c0a8']], ['wisp', M.wisp, 10, ['#ffffff', '#c8ffd8']],
+    ['warrior', M.warrior, 3, ['#ffffff']], ['archer', M.archer, 3, ['#ffffff']], ['mage', M.mage, 3, ['#ffffff']],
+  ] as Array<[FighterKind, () => Box[], number, string[]]>).map(([name, model, max, tints]): SpeciesDef => ({
+    name, model, max, habitat: ['warrior', 'archer', 'mage'].includes(name) ? 'hero' : 'monster', biomes: [], group: [1, 1], speed: 1,
+    scale: name === 'demon' ? [1.15, 1.3] : name === 'spider' ? [0.9, 1.2] : name === 'troll' ? [1, 1.15] : [0.95, 1.05],
+    tints, shadow: name !== 'ghost' && name !== 'wisp', time: 0, translucent: name === 'ghost',
   })),
 ];
 
@@ -75,6 +88,8 @@ export interface Creature {
   col: number; ground: number;
   /** People only. */
   npc?: NpcState;
+  /** Monsters and adventurers only. */
+  fighter?: Fighter;
   /** Seconds since death (0 = alive). */
   dying: number;
   /** Removed from the world (stale references must let go). */
@@ -122,9 +137,10 @@ const angleTo = (from: number, to: number) => {
   return d;
 };
 
-export class Creatures implements NpcHost {
+export class Creatures implements NpcHost, NightHost {
   readonly group = new THREE.Group();
   readonly npcs: NpcDirector;
+  readonly nightDir: NightDirector;
   readonly fire = new FireFx();
   private species: SpeciesRuntime[] = [];
   private spawnTimer = 0;
@@ -139,11 +155,12 @@ export class Creatures implements NpcHost {
   private px = 0; private pz = 0; private night = 0;
   private npcCache: Creature[] | null = null;
   /** Sound hook (set by the soundscape). */
-  onSound: ((ev: SoundEvent, c: Creature, text?: string) => void) | null = null;
+  onSound: ((ev: SoundEvent | NightSound, c: Creature, text?: string) => void) | null = null;
 
   constructor(env: EnvUniforms, shadows: boolean, private world: World, private terrain: Terrain) {
     const mat = createCreatureMaterial(env, shadows);
     const depthMat = createCreatureMaterial(env, false, true);
+    const glassMat = createCreatureMaterial(env, false, false, true);
     for (const def of SPECIES) {
       const geo = buildRig(def.model());
       const anim = new THREE.InstancedBufferAttribute(new Float32Array(def.max * 4), 4).setUsage(THREE.DynamicDrawUsage);
@@ -156,7 +173,7 @@ export class Creatures implements NpcHost {
       const tint3 = new THREE.InstancedBufferAttribute(new Float32Array(def.max * 3).fill(1), 3).setUsage(THREE.DynamicDrawUsage);
       geo.setAttribute('aTint2', tint2);
       geo.setAttribute('aTint3', tint3);
-      const mesh = new THREE.InstancedMesh(geo, mat, def.max);
+      const mesh = new THREE.InstancedMesh(geo, def.translucent ? glassMat : mat, def.max);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.frustumCulled = false;
       mesh.count = 0;
@@ -174,7 +191,8 @@ export class Creatures implements NpcHost {
     }
     this.npcs = new NpcDirector(terrain, this);
     this.npcs.bubbles.onSay = (c, text) => this.onSound?.('say', c, text);
-    this.group.add(this.npcs.group, this.fire.group);
+    this.nightDir = new NightDirector(terrain, this);
+    this.group.add(this.npcs.group, this.fire.group, this.nightDir.group);
   }
 
   /** Live creatures of one species (read-only; for the soundscape). */
@@ -200,6 +218,7 @@ export class Creatures implements NpcHost {
     this.px = px; this.pz = pz; this.night = night;
     this.npcCache = null;
     this.npcs.update(dt, px, pz, night, cam);
+    this.nightDir.update(dt, px, pz, night);
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
       this.spawnTimer = 0.2;
@@ -209,12 +228,15 @@ export class Creatures implements NpcHost {
       const list = rt.list;
       for (let i = list.length - 1; i >= 0; i--) {
         const c = list[i];
-        const far = Math.hypot(c.x - px, c.z - pz) > (rt.def.habitat === 'dragon' ? 260 : rt.def.habitat === 'npc' ? 240 : DESPAWN);
+        const h = rt.def.habitat;
+        const far = Math.hypot(c.x - px, c.z - pz) > (h === 'dragon' ? 260 : h === 'npc' ? 240 : h === 'hero' ? 200 : h === 'monster' ? 120 : DESPAWN);
         const wrongTime = (rt.def.time === -1 && night < 0.3) || (rt.def.time === 1 && night > 0.75);
-        const alive = c.dying > 0 ? this.stepDying(c, dt) : !(far || (wrongTime && Math.random() < dt * 0.2) || !this.step(rt.def, c, dt, night));
+        const alive = c.dying > 0 ? (c.fighter ? this.nightDir.stepDying(c, dt) : this.stepDying(c, dt))
+          : !(far || (wrongTime && Math.random() < dt * 0.2) || !this.step(rt.def, c, dt, night));
         if (!alive) {
           c.gone = true;
-          if (c.npc) { c.npc.remove = true; this.npcs.bubbles.clear(c); }
+          if (c.npc) c.npc.remove = true;
+          if (c.npc || c.fighter) this.npcs.bubbles.clear(c);
           if (c.flock) c.flock.members--;
           if (rt.def.habitat === 'dragon') { this.dragonCooldown = this.time + 45; if (c.prey) c.prey.held = false; }
           list[i] = list[list.length - 1];
@@ -310,7 +332,7 @@ export class Creatures implements NpcHost {
       const idx = (this.spawnCursor + k) % this.species.length;
       const rt = this.species[idx];
       const def = rt.def;
-      if (rt.list.length >= def.max || def.habitat === 'npc') continue;
+      if (rt.list.length >= def.max || def.habitat === 'npc' || def.habitat === 'monster' || def.habitat === 'hero') continue;
       if ((def.time === 1 && night > 0.6) || (def.time === -1 && night < 0.5)) continue;
       this.spawnCursor = idx + 1;
       if (def.habitat === 'dragon') { this.spawnDragon(rt, px, pz); return; }
@@ -402,6 +424,7 @@ export class Creatures implements NpcHost {
       case 'flutter': return this.stepFlutter(def, c, dt, night);
       case 'dragon': return this.stepDragon(def, c, dt);
       case 'npc': return this.npcs.step(c, dt, night);
+      case 'monster': case 'hero': return this.nightDir.step(c, dt);
     }
   }
 
@@ -962,6 +985,60 @@ export class Creatures implements NpcHost {
     c.walkAmp += ((moved ? 0.65 : 0) - c.walkAmp) * Math.min(1, dt * 8);
     return moved ? 'moving' : 'blocked';
   }
+
+  // ------------------------------------------------------------ night (NightHost)
+
+  spawnFighter(kind: FighterKind, x: number, z: number): Creature | null {
+    const idx = this.species.findIndex((s) => s.def.name === kind);
+    const rt = this.species[idx];
+    if (!rt || rt.list.length >= rt.def.max) return null;
+    const col = this.column(x, z);
+    if (!col || col[1]) return null;
+    const y = this.walkable(x, z, col[0]);
+    if (!Number.isFinite(y) && kind !== 'ghost' && kind !== 'wisp') return null;
+    const c = this.make(idx, x, Number.isFinite(y) ? y : col[0], z, new THREE.Color(pickOf(rt.def.tints)), rt.def);
+    if (rt.def.habitat === 'hero') {
+      // Each adventurer gets their own colours; the mage's hat and robe match.
+      const r = Math.random;
+      c.tint.set(pickOf(SHIRTS)); c.tint2.set(pickOf(kind === 'archer' ? ['#4a7a3a', '#5a6a3a', '#3a5a4a'] : kind === 'mage' ? ['#4a4aa0', '#7a3a9a', '#3a6a9a'] : ['#b03a3a', '#3a5ab0', '#d8b04a']));
+      if (kind === 'mage') c.tint.copy(c.tint2);
+      c.tint3.set(pickOf(HAIR)); c.skin = r() * 0.85;
+    }
+    rt.list.push(c);
+    return c;
+  }
+
+  columnAt(x: number, z: number): [number, boolean, boolean] | null { return this.column(x, z); }
+
+  scatter(x: number, z: number, r: number): void {
+    for (const rt of this.species) {
+      if (rt.def.habitat !== 'ground') continue;
+      for (const a of rt.list) {
+        if (a.dying > 0 || a.state === S.FLEE) continue;
+        const dx = a.x - x, dz = a.z - z, d = Math.hypot(dx, dz);
+        if (d > r) continue;
+        a.state = S.FLEE; a.timer = rand(4, 7);
+        a.tx = a.x + (dx / (d || 1)) * 22; a.tz = a.z + (dz / (d || 1)) * 22;
+      }
+    }
+  }
+
+  nearestAnimal(x: number, z: number, r: number): Creature | null {
+    let best: Creature | null = null, bd = r;
+    for (const rt of this.species) {
+      if (rt.def.habitat !== 'ground') continue;
+      for (const a of rt.list) {
+        const d = Math.hypot(a.x - x, a.z - z);
+        if (a.dying === 0 && d < bd) { bd = d; best = a; }
+      }
+    }
+    return best;
+  }
+
+  say(c: Creature, text: string, sec?: number): void { this.npcs.bubbles.say(c, text, sec); }
+  sound(ev: NightSound, c: Creature): void { this.onSound?.(ev, c); }
+  alarm(raider: Creature): void { this.npcs.alarm(raider); }
+  hit(target: Creature, dmg: number, from: Creature): void { this.nightDir.hit(target, dmg, from); }
 
   /** Dev helper: fly to an NPC doing a task (chat, buy, sell, play, work...). */
   findTask(task: string, x: number, z: number): THREE.Vector3 | null {

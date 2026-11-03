@@ -303,6 +303,9 @@ function frame(): void {
         };
         (window as unknown as Record<string, unknown>).__dinfo = () => creatures.dragonInfo();
         (window as unknown as Record<string, unknown>).__counts = () => creatures.counts();
+        (window as unknown as Record<string, unknown>).__night = (what: string) => creatures.nightDir.devSpawn(what);
+        (window as unknown as Record<string, unknown>).__ninfo = () => creatures.nightDir.info();
+        (window as unknown as Record<string, unknown>).__hour = (h: number) => { daynight.time = (h / 24) % 1; return daynight.clock(); };
         (window as unknown as Record<string, unknown>).__role = (role: string) => creatures.allNpcs().filter((c) => c.npc?.role === role)
           .map((c) => ({ task: c.npc!.task, next: c.npc!.next, ri: c.npc!.ri, route: c.npc!.route.length / 2, at: [Math.round(c.x), Math.round(c.z)] }));
         (window as unknown as Record<string, unknown>).__sound = () => { sound.start(); return sound.stats(); };

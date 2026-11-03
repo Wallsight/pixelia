@@ -1,5 +1,6 @@
-// Pixel particles for dragon fire and smoke: square points (matching the voxel
-// look), additive for flames, alpha-blended for smoke. CPU-simulated pools.
+// Pixel particles for dragon fire, smoke and magic: square points (matching the
+// voxel look), additive for flames and sparks, alpha-blended for smoke.
+// CPU-simulated pools.
 
 import * as THREE from 'three';
 
@@ -21,12 +22,19 @@ void main() {
   gl_FragColor = vColor;
 }`;
 
+type PoolKind = 'fire' | 'smoke' | 'spark';
+
 class Pool {
   readonly points: THREE.Points;
   private pos: Float32Array; private col: Float32Array; private size: Float32Array;
   private vel: Float32Array; private life: Float32Array; private max: Float32Array; private grow: Float32Array;
+  /** Spark pools: each particle's own colour. */
+  private base: Float32Array;
   private n = 0;
-  constructor(readonly cap: number, additive: boolean, private smoke: boolean, halfH: { value: number }) {
+  private smoke: boolean;
+  constructor(readonly cap: number, additive: boolean, private kind: PoolKind, halfH: { value: number }) {
+    this.smoke = kind === 'smoke';
+    this.base = new Float32Array(kind === 'spark' ? cap * 3 : 0);
     this.pos = new Float32Array(cap * 3); this.col = new Float32Array(cap * 4); this.size = new Float32Array(cap);
     this.vel = new Float32Array(cap * 3); this.life = new Float32Array(cap); this.max = new Float32Array(cap); this.grow = new Float32Array(cap);
     const g = new THREE.BufferGeometry();
@@ -42,11 +50,12 @@ class Pool {
     this.points.frustumCulled = false;
   }
 
-  emit(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, size: number, grow: number): void {
+  emit(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, size: number, grow: number, r = 1, g = 1, b = 1): void {
     if (this.n >= this.cap) return;
     const i = this.n++;
     this.pos.set([x, y, z], i * 3); this.vel.set([vx, vy, vz], i * 3);
     this.life[i] = 0; this.max[i] = life; this.size[i] = size; this.grow[i] = grow;
+    if (this.kind === 'spark') this.base.set([r, g, b], i * 3);
   }
 
   update(dt: number): void {
@@ -57,6 +66,7 @@ class Pool {
         const j = --this.n;
         this.pos.copyWithin(i * 3, j * 3, j * 3 + 3); this.vel.copyWithin(i * 3, j * 3, j * 3 + 3);
         this.life[i] = this.life[j]; this.max[i] = this.max[j]; this.size[i] = this.size[j]; this.grow[i] = this.grow[j];
+        if (this.kind === 'spark') this.base.copyWithin(i * 3, j * 3, j * 3 + 3);
         i--;
         continue;
       }
@@ -66,10 +76,13 @@ class Pool {
         this.vel[i * 3 + a] *= Math.max(0, 1 - drag * dt);
         this.pos[i * 3 + a] += this.vel[i * 3 + a] * dt;
       }
-      this.vel[i * 3 + 1] += (this.smoke ? 1.2 : 2.5) * dt; // hot air rises
+      this.vel[i * 3 + 1] += (this.smoke ? 1.2 : this.kind === 'spark' ? 0.6 : 2.5) * dt; // hot air rises
       this.size[i] += this.grow[i] * dt;
       const c = i * 4;
-      if (this.smoke) {
+      if (this.kind === 'spark') {
+        const w = 1 - k;
+        this.col[c] = this.base[i * 3] * w; this.col[c + 1] = this.base[i * 3 + 1] * w; this.col[c + 2] = this.base[i * 3 + 2] * w; this.col[c + 3] = w;
+      } else if (this.smoke) {
         const g = 0.25 + 0.2 * k;
         this.col[c] = g; this.col[c + 1] = g; this.col[c + 2] = g * 1.05; this.col[c + 3] = 0.55 * (1 - k);
       } else {
@@ -93,11 +106,21 @@ export class FireFx {
   private halfH = { value: 400 };
   private fire: Pool;
   private smoke: Pool;
+  private sparks: Pool;
 
   constructor() {
-    this.fire = new Pool(900, true, false, this.halfH);
-    this.smoke = new Pool(500, false, true, this.halfH);
-    this.group.add(this.smoke.points, this.fire.points);
+    this.fire = new Pool(900, true, 'fire', this.halfH);
+    this.smoke = new Pool(500, false, 'smoke', this.halfH);
+    this.sparks = new Pool(600, true, 'spark', this.halfH);
+    this.group.add(this.smoke.points, this.fire.points, this.sparks.points);
+  }
+
+  /** Coloured magic sparks drifting out from (x, y, z). */
+  spark(x: number, y: number, z: number, r: number, g: number, b: number, n = 1, speed = 0.6): void {
+    for (let i = 0; i < n; i++) {
+      this.sparks.emit(x, y, z, (Math.random() - 0.5) * speed * 2, (Math.random() - 0.3) * speed * 2, (Math.random() - 0.5) * speed * 2,
+        0.35 + Math.random() * 0.4, 0.14 + Math.random() * 0.12, -0.1, r, g, b);
+    }
   }
 
   /** A cone of flame from (x,y,z) towards direction (dx,dy,dz). */
@@ -125,5 +148,6 @@ export class FireFx {
     this.halfH.value = viewportHalfHeight;
     this.fire.update(dt);
     this.smoke.update(dt);
+    this.sparks.update(dt);
   }
 }

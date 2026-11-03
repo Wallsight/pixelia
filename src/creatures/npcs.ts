@@ -13,7 +13,7 @@ import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
 
 export type Role = 'villager' | 'farmer' | 'merchant' | 'elder' | 'guard' | 'kid' | 'traveler' | 'bard' | 'crier';
-type Task = 'idle' | 'walk' | 'chat' | 'work' | 'sell' | 'buy' | 'visit' | 'play' | 'patrol' | 'travel' | 'home' | 'perform' | 'listen' | 'announce';
+type Task = 'idle' | 'walk' | 'chat' | 'work' | 'sell' | 'buy' | 'visit' | 'play' | 'patrol' | 'travel' | 'home' | 'perform' | 'listen' | 'announce' | 'fight';
 
 export interface NpcState {
   role: Role;
@@ -60,6 +60,8 @@ export interface NpcHost {
   walkToward(c: Creature, tx: number, tz: number, speed: number, dt: number): 'moving' | 'arrived' | 'blocked';
   idle(c: Creature, dt: number): void;
   allNpcs(): Creature[];
+  /** Guards strike raiding monsters. */
+  hit(target: Creature, dmg: number, from: Creature): void;
 }
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -87,6 +89,8 @@ const SELL: string[][] = [
 const CALLS = ['Taze ekmek, sıcak ekmek!', 'Kumaşlar, baharatlar!', 'Elmalar tatlı, armutlar ballı!', 'Gel vatandaş, gel!', 'Bugün indirim var!'];
 const KIDS = ['Ebe sensin!', 'Yakalayamazsın!', 'Hahaha!', 'Bekle beni!', 'Sobe!'];
 const GUARD = ['Her şey yolunda.', 'Gözüm üstünüzde.', 'Ejderha görünürse çanı çalın!'];
+const GUARD_FIGHT = ['Geri çekil, yaratık!', 'Köyümüze giremezsin!', 'Herkes evine!'];
+const FLEE = ['İmdat!', 'Canavar!', 'Eve, çabuk!'];
 const SONGS: string[][] = [
   ['♪ Dağlardan indi kanatlı ejder ♪', '♫ Külkent\'in çanı çaldı derinden ♫', '♪ Kahraman yok, ama çorba sıcak! ♪'],
   ['♪ Kara kulede bir göz uyanmış ♪', '♫ Bakma ona, sakın bakma ♫', '♪ Sen yürü, yolun açık olsun ♪'],
@@ -229,6 +233,25 @@ export class NpcDirector {
   constructor(private terrain: Terrain, private host: NpcHost) {}
 
   get group(): THREE.Group { return this.bubbles.group; }
+
+  /** A raiding monster is near: guards close in to fight it, everyone else hurries home. */
+  alarm(raider: Creature): void {
+    for (const c of this.host.allNpcs()) {
+      const n = c.npc;
+      if (!n || !n.town || n.remove) continue;
+      const d = Math.hypot(c.x - raider.x, c.z - raider.z);
+      if (d > 30) continue;
+      if (n.role === 'guard') {
+        if (n.task === 'fight' && n.partner && !n.partner.gone && n.partner.dying === 0) continue;
+        if (n.partner && n.partner.npc) this.endTalk(c);
+        n.task = 'fight'; n.partner = raider; n.t = 0; n.route = [];
+        if (this.near(c)) this.bubbles.say(c, pick(GUARD_FIGHT), 2.4);
+      } else if (n.task !== 'home' && !(n.task === 'walk' && n.next === 'home')) {
+        if (this.near(c) && Math.random() < 0.4) this.bubbles.say(c, pick(FLEE), 1.8);
+        this.goHome(c);
+      }
+    }
+  }
 
   update(dt: number, px: number, pz: number, night: number, cam: THREE.Vector3): void {
     this.player.set(px, 0, pz);
@@ -527,6 +550,18 @@ export class NpcDirector {
       case 'perform': return this.perform(c, dt, night);
       case 'listen': return this.listen(c, dt, night);
       case 'announce': return this.announce(c, dt, night);
+      case 'fight': {
+        const foe = n.partner;
+        if (!foe || foe.gone || foe.dying > 0) { n.partner = null; this.plan(c, night); return true; }
+        const d = Math.hypot(foe.x - c.x, foe.z - c.z);
+        if (d > 40) { n.partner = null; this.plan(c, night); return true; }
+        if (d > 1.7) { this.host.walkToward(c, foe.x, foe.z, 2.2, dt); this.armsWalk(c); return true; }
+        this.host.idle(c, dt);
+        this.face(c, foe, dt);
+        n.t -= dt;
+        if (n.t <= 0) { n.t = rand(1, 1.4); c.tail = 1.2; this.host.hit(foe, 2.5, c); }
+        return true;
+      }
       case 'patrol': {
         if (Math.random() < dt * 0.02 && this.near(c)) this.bubbles.say(c, pick(GUARD));
         this.plan(c, night);
