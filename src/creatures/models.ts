@@ -507,3 +507,48 @@ export function deepone(): Box[] {
     { s: [0.04, 0.2, 0.16], at: [-0.25, 1.46, 0.08], c: fin, t: SL.FIXED, part: PART.HEAD, pivot: hp },
   ];
 }
+
+/**
+ * The great dragon: the dragon body plan, older and heavier. Moss-bronze hide,
+ * a crown of horns, a spiked jaw, plates down the back and gold crusted on the
+ * belly from centuries asleep on the hoard. Its eyes are closed lids here;
+ * the open, glowing eyes are drawn separately.
+ */
+export function greatDragon(): Box[] {
+  const recolour: Record<string, string> = {
+    '#7a3348': '#5e6e52', '#e2b56c': '#d2b070', '#5c2738': '#3c4838', '#eadfc4': '#efe3c0', '#3e1a28': '#28321f', '#ffd34a': '#4e5c44',
+  };
+  const out = dragon().map((b): Box => ({ ...b, c: recolour[String(b.c)] ?? b.c }));
+  const hide = '#5e6e52', plate = '#28321f', horn = '#efe3c0', gold = '#ffd24a';
+  const neckP: V3 = [0, 3.1, 2.2], tailP: V3 = [0, 2.9, -2.4];
+  const head = (s: V3, at: V3, c: string): Box => ({ s, at, c, part: PART.HEAD, pivot: neckP });
+  out.push(
+    // Heavier shoulders and haunches.
+    { s: [2.7, 1.5, 1.8], at: [0, 3.3, 1.3], c: hide },
+    { s: [2.5, 1.4, 1.6], at: [0, 3.1, -1.5], c: hide },
+    // Crown: two great swept-back horns and smaller ones around them.
+    head([0.3, 0.3, 1.1], [0.72, 5.25, 4.5], horn), head([0.3, 0.3, 1.1], [-0.72, 5.25, 4.5], horn),
+    head([0.24, 0.24, 0.9], [0.86, 5.5, 3.75], horn), head([0.24, 0.24, 0.9], [-0.86, 5.5, 3.75], horn),
+    head([0.16, 0.16, 0.6], [0.95, 5.72, 3.15], horn), head([0.16, 0.16, 0.6], [-0.95, 5.72, 3.15], horn),
+    head([0.14, 0.3, 0.14], [0.3, 5.35, 5.8], horn), head([0.14, 0.3, 0.14], [-0.3, 5.35, 5.8], horn),
+    // Heavy brows over the eyes.
+    head([0.34, 0.16, 0.62], [0.6, 5.12, 5.95], plate), head([0.34, 0.16, 0.62], [-0.6, 5.12, 5.95], plate),
+    // Jaw spikes, like a beard.
+    head([0.12, 0.42, 0.12], [0.5, 3.82, 5.5], horn), head([0.12, 0.42, 0.12], [-0.5, 3.82, 5.5], horn),
+    head([0.1, 0.36, 0.1], [0.32, 3.8, 6.15], horn), head([0.1, 0.36, 0.1], [-0.32, 3.8, 6.15], horn),
+    head([0.12, 0.5, 0.12], [0, 3.72, 5.85], horn),
+    // Plates down the neck.
+    head([0.5, 0.22, 0.42], [0, 4.2, 3.0], plate), head([0.44, 0.22, 0.4], [0, 4.6, 3.8], plate),
+  );
+  // Back plates, tall over the shoulders, smaller towards the tail.
+  for (let k = 0; k < 6; k++) out.push({ s: [0.22, 0.9 - k * 0.08, 0.55], at: [0, 4.45 - k * 0.02, 2.0 - k * 0.8], c: plate });
+  // Tail spikes.
+  for (let k = 0; k < 5; k++) out.push({ s: [0.18, 0.5 - k * 0.06, 0.32], at: [0, 3.55 - k * 0.14, -3.2 - k * 1.5], c: plate, part: PART.TAIL, pivot: tailP });
+  // Gold stuck to the belly and flanks.
+  for (const [x, y, z] of [[0.6, 2.05, 1.2], [-0.5, 2.0, -0.4], [0.2, 1.98, -1.4], [-0.7, 2.1, 0.8], [1.05, 2.4, -0.9], [-1.05, 2.5, 1.6], [0.4, 2.0, 0.2]]) {
+    out.push({ s: [0.32, 0.12, 0.32], at: [x, y, z], c: gold });
+  }
+  // Old scars: pale streaks on the flanks.
+  out.push({ s: [0.06, 0.12, 1.4], at: [1.12, 3.4, 0.3], c: '#8a9a7a' }, { s: [0.06, 0.12, 1.0], at: [-1.12, 3.1, -0.6], c: '#8a9a7a' });
+  return out;
+}

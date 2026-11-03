@@ -112,6 +112,7 @@ const LM_HINT: Record<number, string> = {
   [LM.MURLOC_HUTS]: 'kıyıda tuhaf sesler çıkaran kulübeler', [LM.PEON_CAMP]: 'işten bıkmış oduncuların kampı', [LM.DARK_TOWER]: 'ateşten bir gözü olan kara bir kule',
   [LM.MONOLITH]: 'kapkara, kusursuz bir anıt taş', [LM.HOBBIT_HOLE]: 'tepeye oyulmuş yuvarlak kapılı bir ev', [LM.PHONE_BOX]: 'içi dışından büyük mavi bir kulübe',
   [LM.SUNKEN_TEMPLE]: 'kara suların içinde, uyuyan bir şeyin yattığı batık bir tapınak',
+  [LM.DRAGON_LAIR]: 'altın yığınının üstünde uyuyan, bir köy büyüklüğünde yaşlı bir ejder',
 };
 
 function direction(dx: number, dz: number): string {
@@ -127,7 +128,7 @@ function gossipFor(t: Terrain, site: Site): Gossip[] {
     .sort((a, b) => Math.hypot(a.x - site.x, a.z - site.z) - Math.hypot(b.x - site.x, b.z - site.z));
   const seen = new Set<number>();
   for (const lm of lms) {
-    if (seen.has(lm.kind) || out.length >= 6) continue;
+    if (seen.has(lm.kind) || out.length >= 6 || lm.kind === LM.DRAGON_LAIR) continue;
     seen.add(lm.kind);
     const d = Math.hypot(lm.x - site.x, lm.z - site.z);
     out.push({ text: `${direction(lm.x - site.x, lm.z - site.z)}, ${Math.round(d / 50) * 50} adım ötede ${LM_HINT[lm.kind]} varmış.`, id: `l:${lm.id}` });
@@ -136,6 +137,12 @@ function gossipFor(t: Terrain, site: Site): Gossip[] {
     const d = Math.hypot(t.tower.x - site.x, t.tower.z - site.z);
     const tl = t.landmarks.near(t.tower.x, t.tower.z, t.tower.x, t.tower.z, 1)[0];
     out.push({ text: `Çok uzaklarda, ${direction(t.tower.x - site.x, t.tower.z - site.z)}, ${Math.round(d / 100) * 100} adım ötede kara bir kule yükselirmiş.`, id: tl ? `l:${tl.id}` : null });
+  }
+  // Everyone has heard of the great dragon.
+  const lair = t.landmarks.lair();
+  if (lair) {
+    const d = Math.hypot(lair.x - site.x, lair.z - site.z);
+    out.push({ text: `${direction(lair.x - site.x, lair.z - site.z)}, ${Math.round(d / 50) * 50} adım ötede Közhan uyurmuş: köy kadar büyük, yaşlı bir ejder. Konuşurmuş bile!`, id: `l:${lair.gx},${lair.gz}` });
   }
   return out;
 }

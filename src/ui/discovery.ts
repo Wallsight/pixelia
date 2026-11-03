@@ -14,7 +14,7 @@ export const LANDMARK_NAMES: Record<number, string> = {
   [LM.SANDWORM]: 'Kum Kurdu İskeleti', [LM.MOISTURE_FARM]: 'Nem Çiftliği', [LM.SABER_STONE]: 'Taştaki Işın Kılıcı',
   [LM.CHAPEL]: 'Terk Edilmiş Şapel', [LM.PENTAGRAM]: 'Lav Yıldızı', [LM.MURLOC_HUTS]: 'Mırıl Kulübeleri',
   [LM.PEON_CAMP]: 'Oduncu Kampı', [LM.DARK_TOWER]: 'Kara Kule', [LM.MONOLITH]: 'Kara Anıt', [LM.HOBBIT_HOLE]: 'Tepe Evi',
-  [LM.PHONE_BOX]: 'Mavi Kulübe', [LM.SUNKEN_TEMPLE]: 'Batık Tapınak',
+  [LM.PHONE_BOX]: 'Mavi Kulübe', [LM.SUNKEN_TEMPLE]: 'Batık Tapınak', [LM.DRAGON_LAIR]: 'Közhan\'ın İni',
 };
 
 const key = (cx: number, cz: number) => (cx + 32768) * 65536 + (cz + 32768);
@@ -139,7 +139,7 @@ export class Discovery {
       if (Math.hypot(s.x - px, s.z - pz) < r) this.discover(`s:${s.id}`, siteTitle(s));
     }
     for (const lm of this.terrain.landmarks.near(px - 60, pz - 60, px + 60, pz + 60, 0)) {
-      const r = lm.kind === LM.DARK_TOWER ? 60 : 24;
+      const r = lm.kind === LM.DARK_TOWER ? 60 : lm.kind === LM.DRAGON_LAIR ? 45 : 24;
       if (Math.hypot(lm.x - px, lm.z - pz) < r) this.discover(landmarkId(lm), LANDMARK_NAMES[lm.kind]);
     }
   }

@@ -28,9 +28,10 @@ const ENTRIES: Array<[number, string]> = [
   [LM.MONOLITH, '2001: Uzay Destanı'],
   [LM.PHONE_BOX, 'Doctor Who'],
   [LM.SUNKEN_TEMPLE, 'Lovecraft'],
+  [LM.DRAGON_LAIR, 'Pixelia efsanesi'],
 ];
 
-const W = 360, H = 414;
+const W = 360, H = 436;
 const BOARD_W = 3.2, BOARD_H = BOARD_W * (H / W);
 
 export class LegendBoard {

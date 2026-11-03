@@ -157,6 +157,15 @@ export class Soundscape {
     else this.play(null, 'sfx', 0, 0.5, 0, 0.9, (o, t) => X.colossusDrone(e, o, t));
   }
 
+  /** The great dragon: snores, the eye opening, the yawn of fire, its voice. */
+  wyrm(ev: 'snore' | 'stir' | 'yawn' | 'voice', at: [number, number, number], text?: string): void {
+    const e = this.engine;
+    if (ev === 'snore') this.play(at, 'sfx', 18, 0.3, 170, 1, (o, t) => X.snore(e, o, t, 3));
+    else if (ev === 'stir') this.play(at, 'sfx', 14, 0.3, 120, 1, (o, t) => X.eyeOpen(e, o, t));
+    else if (ev === 'yawn') this.play(at, 'sfx', 24, 0.4, 260, 1, (o, t) => X.roar(e, o, t, 2.6));
+    else this.play(at, 'voice', 20, 0.25, 140, 1, (o, t) => X.wyrmVoice(e, o, t, text ?? ''));
+  }
+
   /** Discovery / rumour jingles. */
   jingle(kind: 'found' | 'rumor'): void {
     if (kind === 'found') this.play(null, 'sfx', 0, 0.5, 0, 0.9, (o, t) => X.chime(this.engine, o, t, [784, 988, 1175, 1568], 0.11));

@@ -541,6 +541,84 @@ function phoneBox(pb: PlanBuilder): void {
   pb.text(0, 0, 3, 'İçi dışından büyük', 0, 1, 'post');
 }
 
+// ------------------------------------------------------------------ the great dragon's lair
+
+/** Height of the hoard under the great dragon's belly, above the lair floor. */
+export const LAIR_BED = 3;
+const LAIR_R = 40;
+
+/** Where the great dragon lies in its lair: world position, facing and bed height. */
+export function lairPose(lm: Landmark): { x: number; y: number; z: number; yaw: number } {
+  const yaw = [0, -Math.PI / 2, Math.PI, Math.PI / 2][lm.rot];
+  // The body is centred a little behind the lair centre (the head reaches forward).
+  return { x: lm.x - Math.sin(yaw) * 2, y: Math.floor(lm.h) + LAIR_BED + 1, z: lm.z - Math.cos(yaw) * 2, yaw };
+}
+
+/**
+ * An old ruined amphitheatre the dragon took for itself: a scorched floor, a
+ * long mound of gold under its belly, coins strewn everywhere, a ring of broken
+ * pillars and the bones of something long dead. The dragon itself is a creature.
+ */
+function dragonLair(pb: PlanBuilder): void {
+  pb.level(LAIR_R, 18);
+  const R = LAIR_R;
+  // Scorched floor: ash, basalt and gravel blotches, gold coins scattered towards the middle.
+  for (let z = -R; z <= R; z++) for (let x = -R; x <= R; x++) {
+    const d = Math.hypot(x, z);
+    if (d > R - 1) continue;
+    const n = pb.noise(x, 0, z, 1), k = pb.rnd(30) * 50;
+    // Smooth scorch blotches (big burnt patches rather than speckles).
+    const m = 0.5 + 0.28 * Math.sin(x * 0.21 + k) * Math.cos(z * 0.17 - k) + 0.2 * Math.sin((x - z) * 0.11 + k) + (pb.noise(x, 7, z, 2) - 0.5) * 0.25;
+    // Scorched towards the middle, grass creeping back in at the edge.
+    const burnt = m < 1.0 - (d / R) * 0.6;
+    if (burnt) pb.set(x, 0, z, n < 0.45 ? B.ASH : n < 0.7 ? B.GRAVEL : n < 0.9 ? B.BASALT : B.MOSS_STONE);
+    if (n < 0.06 * (1 - d / R) + 0.01) pb.set(x, 1, z, B.GOLD);
+  }
+  // The hoard: a long, lumpy mound of gold along the body, with crates and lanterns sunk in it.
+  for (let z = -30; z <= 24; z++) for (let x = -19; x <= 19; x++) {
+    const e = Math.hypot(x / 17, (z + 3) / 26);
+    if (e > 1) continue;
+    const top = Math.round((1 - e * e) * (LAIR_BED + 1) + (pb.noise(x, 3, z, 3) - 0.5) * 1.6);
+    for (let y = 1; y <= top; y++) pb.set(x, y, z, y === top && pb.noise(x, y, z, 4) < 0.04 ? B.CRATE : B.GOLD);
+  }
+  for (const [x, z] of [[-13, -12], [14, 5], [-10, 15], [11, -22]]) pb.set(x, LAIR_BED, z, B.LANTERN);
+  // A ring of broken pillars, some whole, some stumps, a few fallen outwards.
+  const N = 16;
+  for (let i = 0; i < N; i++) {
+    if (i === 0) continue; // the way in, in front of the head
+    const a = (i / N) * Math.PI * 2 + Math.PI / 2;
+    const px = Math.round(Math.cos(a) * (R - 4)), pz = Math.round(Math.sin(a) * (R - 4));
+    const r = pb.rnd(20 + i);
+    const stone = (x: number, y: number, z: number) => { const n = pb.noise(x, y, z, 5); return n < 0.45 ? B.STONE_BRICKS : n < 0.7 ? B.CRACKED_BRICKS : n < 0.9 ? B.MOSSY_BRICKS : B.COBBLE; };
+    if (r < 0.2) {
+      // Fallen: a column lying on the ground pointing away from the centre.
+      const dx = Math.cos(a), dz = Math.sin(a);
+      for (let k = 0; k < 9; k++) pb.box(Math.round(px + dx * k), 1, Math.round(pz + dz * k), Math.round(px + dx * k) + 1, 2, Math.round(pz + dz * k) + 1, stone);
+      continue;
+    }
+    const h = r < 0.5 ? 3 + Math.floor(r * 8) : 9 + Math.floor(r * 7);
+    pb.box(px - 1, 1, pz - 1, px + 1, 1, pz + 1, stone);
+    pb.box(px, 2, pz, px + 1, h, pz + 1, stone);
+    if (h > 10) pb.box(px - 1, h + 1, pz - 1, px + 2, h + 1, pz + 2, stone);
+    // Old claw marks: soot streaks on the inner face.
+    if (r > 0.6) for (let y = 3; y < h - 1; y += 2) pb.set(px - Math.sign(px), y, pz, B.BASALT);
+  }
+  // The bones of something huge, long dead, curled at the edge of the hoard.
+  for (let z = 6; z <= 26; z++) pb.set(-28 + Math.round(Math.sin(z * 0.3) * 2), 1, z, B.BONE);
+  for (let z = 8; z <= 24; z += 3) {
+    const sx = -28 + Math.round(Math.sin(z * 0.3) * 2);
+    for (let a = 0; a <= 180; a += 6) {
+      const rad = (a * Math.PI) / 180;
+      pb.set(sx + Math.round(Math.cos(rad) * 4), Math.round(Math.sin(rad) * 4), z, B.BONE);
+    }
+  }
+  pb.box(-30, 1, 28, -27, 3, 30, B.BONE);
+  pb.set(-29, 2, 31, C_AIR); pb.set(-28, 2, 31, C_AIR);
+  // A stuck sword or two, from those who came before.
+  for (const [x, z] of [[7, 31], [-6, 33], [18, 27]]) { pb.set(x, 1, z, B.STEEL); pb.set(x, 2, z, B.STEEL); pb.set(x, 3, z, B.GOLD); }
+  pb.text(0, 0, R - 2, 'Közhan\'ın İni', 0, 1, 'post', 'Uyuyan ejderi gıdıklama');
+}
+
 const BUILDERS: Record<number, { reach: number; up: number; build: (pb: PlanBuilder) => void }> = {
   [LM.GRAVEYARD]: { reach: 13, up: 10, build: graveyard },
   [LM.PLATFORM]: { reach: 7, up: 8, build: platform },
@@ -558,10 +636,11 @@ const BUILDERS: Record<number, { reach: number; up: number; build: (pb: PlanBuil
   [LM.HOBBIT_HOLE]: { reach: 11, up: 9, build: hobbitHole },
   [LM.PHONE_BOX]: { reach: 5, up: 7, build: phoneBox },
   [LM.SUNKEN_TEMPLE]: { reach: 13, up: 36, build: sunkenTemple },
+  [LM.DRAGON_LAIR]: { reach: LAIR_R + 1, up: 20, build: dragonLair },
 };
 
 /** Largest reach of any landmark: how far around a chunk to look for them. */
-export const LANDMARK_REACH = 23;
+export const LANDMARK_REACH = LAIR_R + 5;
 
 export function buildLandmark(lm: Landmark, seed: number): LandmarkPlan {
   const spec = BUILDERS[lm.kind];

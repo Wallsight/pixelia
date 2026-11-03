@@ -17,6 +17,7 @@ import { TowerBeacon } from './render/beacon';
 import { Soundscape } from './audio/soundscape';
 import { LegendBoard } from './render/legend-board';
 import { EldritchDirector } from './render/eldritch';
+import { Subtitle } from './ui/subtitle';
 import { villageLayout } from './world/village';
 import { IS_TOUCH, TouchControls } from './ui/touch';
 
@@ -100,6 +101,11 @@ const eldritch = new EldritchDirector(env, SHADOWS, terrain, creatures.fire);
 scene.add(eldritch.group);
 eldritch.onSound = (ev, at) => sound.eldritch(ev, at);
 discovery.onSound = (k) => sound.jingle(k);
+// The great dragon talks in subtitles and knows how many legends the player has found.
+const subtitle = new Subtitle();
+creatures.wyrm.onSpeak = (who, text, sec, asleep) => subtitle.show(who, text, sec, asleep);
+creatures.wyrm.onSound = (ev, at, text) => sound.wyrm(ev, at, text);
+creatures.wyrm.context = () => ({ found: legendBoard?.foundCount ?? 0, flying: player.flying });
 const camFwd = new THREE.Vector3(), camUp = new THREE.Vector3();
 
 // ------------------------------------------------------------ spawn
@@ -313,6 +319,19 @@ function frame(): void {
         (window as unknown as Record<string, unknown>).__hour = (h: number) => { daynight.time = (h / 24) % 1; return daynight.clock(); };
         (window as unknown as Record<string, unknown>).__eld = (what: string) => eldritch.dev(what);
         (window as unknown as Record<string, unknown>).__einfo = () => eldritch.info();
+        (window as unknown as Record<string, unknown>).__wyrm = (what: string) => creatures.wyrm.dev(what);
+        (window as unknown as Record<string, unknown>).__winfo = () => creatures.wyrm.info();
+        // Dev: hear the dragon rumour and stand in front of the legends board.
+        (window as unknown as Record<string, unknown>).__board = () => {
+          const l = terrain.landmarks.lair();
+          if (l) discovery.rumor(`l:${l.gx},${l.gz}`);
+          if (!legendBoard) return 'no board';
+          const g = legendBoard.group, r = g.rotation.y;
+          player.flying = true;
+          player.position.set(g.position.x + Math.sin(r) * 5, g.position.y + 2.2, g.position.z + Math.cos(r) * 5);
+          player.yaw = r; player.pitch = -0.05;
+          return 'ok';
+        };
         (window as unknown as Record<string, unknown>).__role = (role: string) => creatures.allNpcs().filter((c) => c.npc?.role === role)
           .map((c) => ({ task: c.npc!.task, next: c.npc!.next, ri: c.npc!.ri, route: c.npc!.route.length / 2, at: [Math.round(c.x), Math.round(c.z)] }));
         (window as unknown as Record<string, unknown>).__sound = () => { sound.start(); return sound.stats(); };
@@ -340,6 +359,7 @@ function frame(): void {
   if (spawned && !worldMap.open) creatures.update(dt, player.position.x, player.position.z, daynight.night, camera.position);
   if (spawned) discovery.update(dt, player.position.x, player.position.z);
   legendBoard?.update(dt);
+  subtitle.update(dt);
   if (spawned) {
     camera.getWorldDirection(camFwd);
     eldritch.update(dt, camera.position, camFwd, daynight.night, focusSample);

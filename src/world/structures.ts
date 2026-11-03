@@ -237,7 +237,11 @@ export const LM = {
   HOBBIT_HOLE: 13, // Tolkien
   PHONE_BOX: 14, // Doctor Who
   SUNKEN_TEMPLE: 15, // Lovecraft
+  DRAGON_LAIR: 16, // Pixelia's own: the great sleeping dragon
 } as const;
+
+/** Where the one great dragon may make its lair (rugged lands first). */
+const LAIR_BIOMES = [[BIOME.MOUNTAINS, BIOME.BADLANDS, BIOME.TUNDRA, BIOME.TAIGA, BIOME.SNOW_PEAKS], [BIOME.PLAINS, BIOME.FOREST, BIOME.BIRCH_FOREST, BIOME.DESERT]];
 
 const GREEN = [BIOME.PLAINS, BIOME.FOREST, BIOME.BIRCH_FOREST];
 const COLD = [BIOME.TAIGA, BIOME.TUNDRA];
@@ -278,7 +282,54 @@ export interface Landmark {
 /** Selects landmarks on their own jittered grid, away from sites and steep ground. */
 export class LandmarkMap {
   private cache = new Map<string, Landmark | null>();
+  private lairSpot: { gx: number; gz: number; x: number; z: number } | null | undefined;
   constructor(private terrain: Terrain, private sites: StructureMap) {}
+
+  /**
+   * The single lair of the great dragon: the first fitting spot on rings of
+   * landmark cells around the city (two to seven cells out), so it is far
+   * enough to be a journey but near enough to be found.
+   */
+  lair(): { gx: number; gz: number; x: number; z: number } | null {
+    if (this.lairSpot !== undefined) return this.lairSpot;
+    this.lairSpot = null;
+    const seed = this.terrain.seed, c = this.terrain.city ?? { x: 0, z: 0 };
+    const cgx = Math.floor(c.x / LANDMARK_CELL), cgz = Math.floor(c.z / LANDMARK_CELL);
+    const t = this.terrain.tower;
+    for (const biomes of LAIR_BIOMES) {
+      for (let r = 2; r <= 7; r++) {
+        const cells: Array<[number, number]> = [];
+        for (let gz = cgz - r; gz <= cgz + r; gz++) for (let gx = cgx - r; gx <= cgx + r; gx++) {
+          if (Math.max(Math.abs(gx - cgx), Math.abs(gz - cgz)) === r) cells.push([gx, gz]);
+        }
+        // A seeded order, so the lair is not always on the same side.
+        cells.sort((a, b) => hash01(a[0], 1250, a[1], seed) - hash01(b[0], 1250, b[1], seed));
+        for (const [gx, gz] of cells) {
+          if (t && Math.floor(t.x / LANDMARK_CELL) === gx && Math.floor(t.z / LANDMARK_CELL) === gz) continue;
+          for (let k = 0; k < 6; k++) {
+            const x = Math.round((gx + 0.25 + hash01(gx, 1251 + k * 5, gz, seed) * 0.5) * LANDMARK_CELL);
+            const z = Math.round((gz + 0.25 + hash01(gx, 1252 + k * 5, gz, seed) * 0.5) * LANDMARK_CELL);
+            if (this.lairFits(x, z, biomes)) return (this.lairSpot = { gx, gz, x, z });
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  private lairFits(x: number, z: number, biomes: number[]): boolean {
+    const s = this.terrain.sample(x, z);
+    if (!biomes.includes(s.biome) || s.h < SEA + 3 || s.crag > 0.02 || s.river > 0.02 || s.isle > 0) return false;
+    for (const r of [12, 24]) {
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        const o = this.terrain.sample(x + Math.cos(a) * r, z + Math.sin(a) * r);
+        if (Math.abs(o.h - s.h) > (r === 12 ? 6 : 11) || o.h < SEA + 1 || o.river > 0.05) return false;
+      }
+    }
+    if (this.sites.sitesNear(x - 90, z - 90, x + 90, z + 90, 0).length) return false;
+    return !this.sites.sitesNear(x - 150, z - 150, x + 150, z + 150, 0).some((o) => o.kind >= SITE_VILLAGE && Math.hypot(o.x - x, o.z - z) < (o.kind === SITE_CITY ? 150 : 100));
+  }
 
   at(gx: number, gz: number): Landmark | null {
     const id = `${gx},${gz}`;
@@ -295,6 +346,11 @@ export class LandmarkMap {
     if (t && Math.floor(t.x / LANDMARK_CELL) === gx && Math.floor(t.z / LANDMARK_CELL) === gz) {
       const s = this.terrain.sample(t.x, t.z);
       return { id, gx, gz, x: t.x, z: t.z, kind: LM.DARK_TOWER, rot: 0, h: s.h, biome: s.biome };
+    }
+    const lair = this.lair();
+    if (lair && lair.gx === gx && lair.gz === gz) {
+      const s = this.terrain.sample(lair.x, lair.z);
+      return { id, gx, gz, x: lair.x, z: lair.z, kind: LM.DRAGON_LAIR, rot: Math.floor(hash01(gx, 1204, gz, seed) * 4), h: s.h, biome: s.biome };
     }
     if (hash01(gx, 1200, gz, seed) < 0.25) return null;
     // Several jittered spots per cell, so narrow shores and rugged Ashlands still get some.

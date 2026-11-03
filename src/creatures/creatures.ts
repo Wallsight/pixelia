@@ -15,11 +15,12 @@ import { NpcDirector, type NpcHost, type NpcState, type Role } from './npcs';
 import { FireFx } from '../render/fire';
 import { hash01 } from '../engine/noise';
 import { NightDirector, type Fighter, type FighterKind, type NightHost, type NightSound } from './night';
+import { GREAT_DRAGON, GREAT_SCALE, WyrmDirector, type WyrmHost } from './wyrm';
 
 const TAU = Math.PI * 2;
 const DESPAWN = 104;
 
-type Habitat = 'ground' | 'air' | 'water' | 'flutter' | 'dragon' | 'npc' | 'monster' | 'hero';
+type Habitat = 'ground' | 'air' | 'water' | 'flutter' | 'dragon' | 'npc' | 'monster' | 'hero' | 'wyrm';
 
 interface SpeciesDef {
   name: string;
@@ -48,6 +49,8 @@ const SPECIES: SpeciesDef[] = [
   { name: 'butterfly', model: M.butterfly, max: 16, habitat: 'flutter', biomes: [...GREEN], group: [2, 4], speed: 1.2, scale: [1, 1.3], tints: ['#ffb0c8', '#ffe07a', '#a8d8ff', '#ffffff', '#ff9a5a'], shadow: false, time: 1 },
   { name: 'firefly', model: M.firefly, max: 48, habitat: 'flutter', biomes: [...GREEN, BIOME.TAIGA, BIOME.GLOOM, BIOME.RIVER], group: [6, 12], speed: 0.6, scale: [1.5, 1.8], tints: ['#ffffff'], shadow: false, time: -1 },
   { name: 'dragon', model: M.dragon, max: 3, habitat: 'dragon', biomes: [], group: [1, 1], speed: 16, scale: [0.8, 1.15], tints: ['#ffffff', '#a8c4ff', '#c8f0a8', '#ffd08a'], shadow: true, time: 0 },
+  // The one great dragon, asleep in its lair (placed by the wyrm director).
+  { name: GREAT_DRAGON, model: M.greatDragon, max: 1, habitat: 'wyrm', biomes: [], group: [1, 1], speed: 0, scale: [GREAT_SCALE, GREAT_SCALE], tints: ['#ffffff'], shadow: true, time: 0 },
   // People (spawned by the NPC director, not by biome).
   ...([['villager', M.villager, 40], ['farmer', M.farmer, 16], ['merchant', M.merchant, 20], ['elder', M.elder, 12],
     ['guard', M.guard, 10], ['kid', M.kid, 20], ['traveler', M.traveler, 6], ['bard', M.bard, 2], ['crier', M.crier, 2]] as Array<[Role, () => Box[], number]>).map(([name, model, max]): SpeciesDef => ({
@@ -138,10 +141,11 @@ const angleTo = (from: number, to: number) => {
   return d;
 };
 
-export class Creatures implements NpcHost, NightHost {
+export class Creatures implements NpcHost, NightHost, WyrmHost {
   readonly group = new THREE.Group();
   readonly npcs: NpcDirector;
   readonly nightDir: NightDirector;
+  readonly wyrm: WyrmDirector;
   readonly fire = new FireFx();
   private species: SpeciesRuntime[] = [];
   private spawnTimer = 0;
@@ -193,7 +197,8 @@ export class Creatures implements NpcHost, NightHost {
     this.npcs = new NpcDirector(terrain, this);
     this.npcs.bubbles.onSay = (c, text) => this.onSound?.('say', c, text);
     this.nightDir = new NightDirector(terrain, this);
-    this.group.add(this.npcs.group, this.fire.group, this.nightDir.group);
+    this.wyrm = new WyrmDirector(terrain, this);
+    this.group.add(this.npcs.group, this.fire.group, this.nightDir.group, this.wyrm.group);
   }
 
   /** Live creatures of one species (read-only; for the soundscape). */
@@ -220,6 +225,8 @@ export class Creatures implements NpcHost, NightHost {
     this.npcCache = null;
     this.npcs.update(dt, px, pz, night, cam);
     this.nightDir.update(dt, px, pz, night);
+    this.wyrm.night = night;
+    this.wyrm.update(dt, px, cam.y, pz);
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
       this.spawnTimer = 0.2;
@@ -230,7 +237,7 @@ export class Creatures implements NpcHost, NightHost {
       for (let i = list.length - 1; i >= 0; i--) {
         const c = list[i];
         const h = rt.def.habitat;
-        const far = Math.hypot(c.x - px, c.z - pz) > (h === 'dragon' ? 260 : h === 'npc' ? 240 : h === 'hero' ? 200 : h === 'monster' ? 120 : DESPAWN);
+        const far = Math.hypot(c.x - px, c.z - pz) > (h === 'wyrm' ? 340 : h === 'dragon' ? 260 : h === 'npc' ? 240 : h === 'hero' ? 200 : h === 'monster' ? 120 : DESPAWN);
         const wrongTime = (rt.def.time === -1 && night < 0.3) || (rt.def.time === 1 && night > 0.75);
         const alive = c.dying > 0 ? (c.fighter ? this.nightDir.stepDying(c, dt) : this.stepDying(c, dt))
           : !(far || (wrongTime && Math.random() < dt * 0.2) || !this.step(rt.def, c, dt, night));
@@ -333,7 +340,7 @@ export class Creatures implements NpcHost, NightHost {
       const idx = (this.spawnCursor + k) % this.species.length;
       const rt = this.species[idx];
       const def = rt.def;
-      if (rt.list.length >= def.max || def.habitat === 'npc' || def.habitat === 'monster' || def.habitat === 'hero') continue;
+      if (rt.list.length >= def.max || def.habitat === 'npc' || def.habitat === 'monster' || def.habitat === 'hero' || def.habitat === 'wyrm') continue;
       if ((def.time === 1 && night > 0.6) || (def.time === -1 && night < 0.5)) continue;
       this.spawnCursor = idx + 1;
       if (def.habitat === 'dragon') { this.spawnDragon(rt, px, pz); return; }
@@ -426,6 +433,7 @@ export class Creatures implements NpcHost, NightHost {
       case 'dragon': return this.stepDragon(def, c, dt);
       case 'npc': return this.npcs.step(c, dt, night);
       case 'monster': case 'hero': return this.nightDir.step(c, dt);
+      case 'wyrm': return this.wyrm.step(c, dt);
     }
   }
 
@@ -1010,6 +1018,18 @@ export class Creatures implements NpcHost, NightHost {
   }
 
   columnAt(x: number, z: number): [number, boolean, boolean] | null { return this.column(x, z); }
+
+  /** The great dragon, placed on its bed of gold (no ground check: the lair plan sets the height). */
+  spawnGreat(x: number, y: number, z: number, yaw: number): Creature | null {
+    const idx = this.species.findIndex((s) => s.def.name === GREAT_DRAGON);
+    const rt = this.species[idx];
+    if (!rt || rt.list.length >= rt.def.max) return null;
+    const c = this.make(idx, x, y, z, new THREE.Color('#ffffff'), rt.def);
+    c.tint.set('#ffffff');
+    c.yaw = yaw;
+    rt.list.push(c);
+    return c;
+  }
 
   scatter(x: number, z: number, r: number): void {
     for (const rt of this.species) {

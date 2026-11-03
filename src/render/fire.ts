@@ -124,14 +124,22 @@ export class FireFx {
   }
 
   /** A cone of flame from (x,y,z) towards direction (dx,dy,dz). */
-  breathe(x: number, y: number, z: number, dx: number, dy: number, dz: number, dt: number): void {
+  breathe(x: number, y: number, z: number, dx: number, dy: number, dz: number, dt: number, power = 1): void {
     const n = Math.ceil(dt * 380);
     for (let i = 0; i < n; i++) {
-      const sp = 13 + Math.random() * 10, s = 0.5;
+      const sp = (13 + Math.random() * 10) * power, s = 0.5;
       this.fire.emit(x, y, z, (dx + (Math.random() - 0.5) * s) * sp, (dy + (Math.random() - 0.5) * s) * sp, (dz + (Math.random() - 0.5) * s) * sp,
-        0.6 + Math.random() * 0.5, 0.35 + Math.random() * 0.3, 1.9);
+        0.6 + Math.random() * 0.5, (0.35 + Math.random() * 0.3) * power, 1.9 * power);
     }
-    if (Math.random() < dt * 30) this.smoke.emit(x + dx * 6, y + dy * 6, z + dz * 6, dx * 3, 1, dz * 3, 2.5, 0.6, 0.9);
+    if (Math.random() < dt * 30) this.smoke.emit(x + dx * 6 * power, y + dy * 6 * power, z + dz * 6 * power, dx * 3, 1, dz * 3, 2.5, 0.6 * power, 0.9 * power);
+  }
+
+  /** Big, slow smoke from a huge nostril or chimney, drifting along (vx, vy, vz). */
+  plume(x: number, y: number, z: number, vx: number, vy: number, vz: number, n: number, size: number): void {
+    for (let i = 0; i < n; i++) {
+      this.smoke.emit(x + (Math.random() - 0.5) * size * 0.4, y, z + (Math.random() - 0.5) * size * 0.4,
+        vx + (Math.random() - 0.5) * 0.6, vy + Math.random() * 0.5, vz + (Math.random() - 0.5) * 0.6, 3 + Math.random() * 1.5, size, size * 0.8);
+    }
   }
 
   /** Burning on the ground (a felled animal): small flames and smoke. */

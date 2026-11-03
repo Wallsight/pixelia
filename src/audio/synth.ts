@@ -489,6 +489,38 @@ export function eyeOpen(e: AudioEngine, out: AudioNode, t: number): number {
   return tone(e, out, t, 'sawtooth', 58, 46, 0.4, 0.12, 1.6);
 }
 
+/**
+ * The great dragon's voice: slow, huge syllables. A low growling sawtooth
+ * through vowel bands, under a sub-bass that follows the words.
+ */
+export function wyrmVoice(e: AudioEngine, out: AudioNode, t: number, text: string): number {
+  const vs = [...text.toLocaleLowerCase('tr')].filter((ch) => 'aeıioöuü'.includes(ch));
+  const n = Math.min(14, Math.max(3, Math.round(vs.length * 0.45)));
+  const f0 = 44;
+  const o = e.osc('sawtooth', f0), sub = e.osc('sine', f0 / 2);
+  const f1 = e.filter('bandpass', 380, 3), lp = e.filter('lowpass', 900, 0.7);
+  const g = e.gain(), sg = e.gain();
+  const trem = e.osc('sine', 17), td = e.gain(0.2);
+  trem.connect(td); td.connect(g.gain);
+  o.connect(f1); f1.connect(lp); lp.connect(g); g.connect(out);
+  sub.connect(sg); sg.connect(out);
+  g.gain.setValueAtTime(0, t); sg.gain.setValueAtTime(0, t);
+  const formants: Record<string, number> = { a: 520, e: 440, ı: 330, i: 360, o: 400, ö: 380, u: 300, ü: 320 };
+  let s = t;
+  for (let i = 0; i < n; i++) {
+    const v = vs[Math.floor((i / n) * vs.length)] ?? 'a';
+    const dur = rnd(0.2, 0.32);
+    o.frequency.setTargetAtTime(f0 * (1 + 0.12 * Math.sin(i * 1.3)), s, 0.05);
+    f1.frequency.setTargetAtTime(formants[v] ?? 400, s, 0.04);
+    g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(0.9, s + 0.05); g.gain.linearRampToValueAtTime(0.6, s + dur - 0.04); g.gain.linearRampToValueAtTime(0, s + dur);
+    sg.gain.setValueAtTime(0, s); sg.gain.linearRampToValueAtTime(0.5, s + 0.06); sg.gain.linearRampToValueAtTime(0, s + dur + 0.05);
+    s += dur + rnd(0.04, 0.09);
+  }
+  for (const x of [o, sub, trem]) { x.start(t); x.stop(s + 0.1); }
+  burst(e, out, t, 'brown', 'lowpass', 160, 0.7, 0.3, 0.25, s - t);
+  return s + 0.1;
+}
+
 /** A lute phrase: plucked triangle notes on a minor pentatonic, with a soft second string. */
 export function lute(e: AudioEngine, out: AudioNode, t: number, root: number, notes: number): number {
   const scale = [0, 3, 5, 7, 10, 12, 15];
