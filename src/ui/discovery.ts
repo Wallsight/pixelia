@@ -14,7 +14,7 @@ export const LANDMARK_NAMES: Record<number, string> = {
   [LM.SANDWORM]: 'Kum Kurdu İskeleti', [LM.MOISTURE_FARM]: 'Nem Çiftliği', [LM.SABER_STONE]: 'Taştaki Işın Kılıcı',
   [LM.CHAPEL]: 'Terk Edilmiş Şapel', [LM.PENTAGRAM]: 'Lav Yıldızı', [LM.MURLOC_HUTS]: 'Mırıl Kulübeleri',
   [LM.PEON_CAMP]: 'Oduncu Kampı', [LM.DARK_TOWER]: 'Kara Kule', [LM.MONOLITH]: 'Kara Anıt', [LM.HOBBIT_HOLE]: 'Tepe Evi',
-  [LM.PHONE_BOX]: 'Mavi Kulübe',
+  [LM.PHONE_BOX]: 'Mavi Kulübe', [LM.SUNKEN_TEMPLE]: 'Batık Tapınak',
 };
 
 const key = (cx: number, cz: number) => (cx + 32768) * 65536 + (cz + 32768);

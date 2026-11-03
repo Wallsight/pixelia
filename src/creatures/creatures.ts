@@ -57,6 +57,7 @@ const SPECIES: SpeciesDef[] = [
   ...([['skeleton', M.skeleton, 12, ['#ffffff']], ['zombie', M.zombie, 12, ['#5a6a7a', '#6a5a4a', '#4a5a4a', '#7a6a6a']],
     ['demon', M.demon, 6, ['#ffffff']], ['spider', M.spider, 8, ['#3a3038', '#2a2a2e', '#4a3a2e']], ['ghost', M.ghost, 8, ['#ffffff']],
     ['troll', M.troll, 4, ['#c8c8b8', '#b8c0a8']], ['wisp', M.wisp, 10, ['#ffffff', '#c8ffd8']],
+    ['deepone', M.deepone, 10, ['#5a8a7a', '#4a7a6a', '#6a8a6a', '#5a7a8a']],
     ['warrior', M.warrior, 3, ['#ffffff']], ['archer', M.archer, 3, ['#ffffff']], ['mage', M.mage, 3, ['#ffffff']],
   ] as Array<[FighterKind, () => Box[], number, string[]]>).map(([name, model, max, tints]): SpeciesDef => ({
     name, model, max, habitat: ['warrior', 'archer', 'mage'].includes(name) ? 'hero' : 'monster', biomes: [], group: [1, 1], speed: 1,

@@ -76,7 +76,7 @@ const CITY_QUIET = 120;
 const NIGHT_SOUNDS: Record<string, [number, number, number, (e: AudioEngine, o: AudioNode, t: number) => number]> = {
   groan: [4, 45, 0.7, X.groan], rattle: [3, 35, 0.6, X.rattle], growl: [6, 60, 0.9, X.growl], hiss: [3, 30, 0.6, X.hiss],
   wail: [6, 60, 0.6, X.wail], swing: [3, 35, 0.5, X.swing], hit: [3, 40, 0.8, X.thud], clang: [3, 45, 0.6, X.clang],
-  twang: [3, 40, 0.6, X.twang], zap: [4, 50, 0.6, X.zap], poof: [4, 45, 0.7, X.poof],
+  twang: [3, 40, 0.6, X.twang], zap: [4, 50, 0.6, X.zap], poof: [4, 45, 0.7, X.poof], gurgle: [3, 35, 0.6, X.gurgle],
   heal: [4, 40, 0.6, (e, o, t) => X.chime(e, o, t, [880, 1175, 1568], 0.08, 0.12)],
 };
 
@@ -147,6 +147,14 @@ export class Soundscape {
     const end = fn(input, t);
     this.active++;
     setTimeout(() => { input.disconnect(); panner?.disconnect(); this.active--; }, (end - t) * 1000 + 500);
+  }
+
+  /** Eldritch events: tentacles and the temple eye are placed; the colossus is heard everywhere. */
+  eldritch(ev: 'tentacle' | 'colossus' | 'eye', at: [number, number, number] | null): void {
+    const e = this.engine;
+    if (ev === 'tentacle') this.play(at, 'sfx', 10, 0.3, 140, 1, (o, t) => X.tentacleRise(e, o, t));
+    else if (ev === 'eye') this.play(at, 'sfx', 8, 0.3, 90, 0.9, (o, t) => X.eyeOpen(e, o, t));
+    else this.play(null, 'sfx', 0, 0.5, 0, 0.9, (o, t) => X.colossusDrone(e, o, t));
   }
 
   /** Discovery / rumour jingles. */

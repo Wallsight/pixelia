@@ -11,14 +11,14 @@ import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
 import type { FireFx } from '../render/fire';
 
-export type FighterKind = 'skeleton' | 'zombie' | 'demon' | 'spider' | 'ghost' | 'troll' | 'wisp' | 'warrior' | 'archer' | 'mage';
-export const MONSTERS: FighterKind[] = ['skeleton', 'zombie', 'demon', 'spider', 'ghost', 'troll', 'wisp'];
+export type FighterKind = 'skeleton' | 'zombie' | 'demon' | 'spider' | 'ghost' | 'troll' | 'wisp' | 'deepone' | 'warrior' | 'archer' | 'mage';
+export const MONSTERS: FighterKind[] = ['skeleton', 'zombie', 'demon', 'spider', 'ghost', 'troll', 'wisp', 'deepone'];
 export const HEROES: FighterKind[] = ['warrior', 'archer', 'mage'];
 
 /** Night sounds the soundscape plays. */
-export type NightSound = 'groan' | 'rattle' | 'growl' | 'hiss' | 'wail' | 'swing' | 'hit' | 'clang' | 'twang' | 'zap' | 'poof' | 'heal';
+export type NightSound = 'groan' | 'rattle' | 'growl' | 'hiss' | 'wail' | 'swing' | 'hit' | 'clang' | 'twang' | 'zap' | 'poof' | 'heal' | 'gurgle';
 
-type Death = 'bones' | 'burn' | 'fade' | 'flip' | 'topple' | 'smoke';
+type Death = 'bones' | 'burn' | 'fade' | 'flip' | 'topple' | 'smoke' | 'sink';
 
 export interface Fighter {
   kind: FighterKind;
@@ -94,6 +94,7 @@ const KINDS: Record<FighterKind, KindDef> = {
   ghost: { hp: 8, speed: 1.1, dmg: 1.5, cool: 1.5, reach: 1.3, death: 'fade', chase: false, voice: 'wail' },
   troll: { hp: 30, speed: 0.8, dmg: 5, cool: 2.3, reach: 2.4, death: 'topple', chase: true, voice: 'growl' },
   wisp: { hp: 3, speed: 1.4, dmg: 0, cool: 9, reach: 0, death: 'fade', chase: false, voice: null },
+  deepone: { hp: 10, speed: 1.15, dmg: 2, cool: 1.2, reach: 1.4, death: 'sink', chase: false, voice: 'gurgle' },
   warrior: { hp: 30, speed: 1.5, dmg: 3, cool: 0.9, reach: 2.1, death: 'smoke', chase: false, voice: null },
   archer: { hp: 18, speed: 1.5, dmg: 2.5, cool: 1.6, reach: 20, death: 'smoke', chase: false, voice: null },
   mage: { hp: 16, speed: 1.4, dmg: 4, cool: 2.4, reach: 17, death: 'smoke', chase: false, voice: null },
@@ -108,7 +109,9 @@ const SPAWNS: Array<{ kind: FighterKind; biomes: number[]; w: number; group: [nu
   { kind: 'ghost', biomes: [BIOME.GLOOM, BIOME.TUNDRA, BIOME.PLAINS, BIOME.SNOW_PEAKS], w: 1.2, group: [1, 2] },
   { kind: 'troll', biomes: [BIOME.MOUNTAINS, BIOME.TAIGA, BIOME.TUNDRA, BIOME.STONY_SHORE, BIOME.SNOW_PEAKS], w: 1.6, group: [1, 1] },
   { kind: 'wisp', biomes: [BIOME.GLOOM, BIOME.RIVER, BIOME.FOREST, BIOME.BIRCH_FOREST, BIOME.BLACK_BEACH], w: 1.4, group: [2, 4] },
+  { kind: 'deepone', biomes: [BIOME.BLACK_BEACH], w: 8, group: [3, 5] },
 ];
+const CHANT = ['Ia... Ia...', 'Glub... glub...', 'Uyanacak...', 'Derinlerden...', 'Ia!'];
 
 const PARTY_NAMES = ['Üç Fener', 'Gümüş Kalkan', 'Kuzey Rüzgârı', 'Kırık Ok', 'Son Işık', 'Kül Yürüyenler', 'Ay Muhafızları', 'Demir Yemin'];
 const PARTY_TALK = [
@@ -282,7 +285,7 @@ export class NightDirector {
         f.stone = true; c.walkAmp = 0; c.flapAmp = 0; c.tint.set('#8a8a86'); this.host.sound('poof', c);
         this.host.fire.puff(c.x, c.y + 1.5, c.z, 10);
       } else {
-        f.death = f.kind === 'skeleton' || f.kind === 'zombie' || f.kind === 'demon' ? 'burn' : 'fade';
+        f.death = f.kind === 'skeleton' || f.kind === 'zombie' || f.kind === 'demon' ? 'burn' : f.kind === 'deepone' ? 'sink' : 'fade';
         c.dying = 1e-4;
         return true;
       }
@@ -293,6 +296,7 @@ export class NightDirector {
       return true;
     }
     if (f.kind === 'wisp') return this.stepWisp(c, f, dt);
+    if (f.kind === 'deepone' && !f.foe && this.ritual(c, f, dt)) return true;
 
     // Pick a foe now and then: the nearest standing hero, or a guard when raiding.
     if (f.cool < 0.3 && (!f.foe || f.foe.gone || f.foe.dying > 0 || (f.foe.fighter && f.foe.fighter.down > 0))) f.foe = this.nearestHero(c, f.raid ? 10 : 12);
@@ -347,6 +351,37 @@ export class NightDirector {
     else if (f.kind === 'demon') { c.flap += dt * 2; c.flapAmp = Math.max(c.flapAmp, 0.25); c.tail = Math.sin(this.time * 2 + c.seed) * 0.4; }
     else c.head = Math.sin(this.time * 0.8 + c.seed) * 0.1;
     this.glow(c, f, f.kind === 'ghost' ? 0.55 : f.kind === 'demon' ? 0.12 : 0);
+    return true;
+  }
+
+  /**
+   * Deep ones stop now and then on the shore, face the water, raise their arms
+   * and chant. Returns true while the ritual runs.
+   */
+  private ritual(c: Creature, f: Fighter, dt: number): boolean {
+    if (c.state !== 1) {
+      if (f.t > 0 || Math.random() > dt * 0.25) return false;
+      // Find the sea: the nearest wet column in eight directions.
+      let best = -1, bd = 1e9;
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * TAU;
+        for (const r of [4, 8, 12]) {
+          const col = this.host.columnAt(c.x + Math.cos(a) * r, c.z + Math.sin(a) * r);
+          if (col && col[1] && r < bd) { bd = r; best = a; }
+        }
+      }
+      if (best < 0) { f.t = rand(4, 8); return false; }
+      c.state = 1; c.aux = best; f.t = rand(12, 22);
+    }
+    if (f.t <= 0 || this.nearestHero(c, 10)) { c.state = 0; f.t = rand(8, 16); return false; }
+    this.host.idle(c, dt);
+    c.yaw += angleTo(c.yaw, Math.atan2(Math.cos(c.aux), Math.sin(c.aux))) * Math.min(1, dt * 3);
+    c.tail = 2.3 + Math.sin(this.time * 2.2 + c.seed) * 0.25; // arms raised to the sea
+    c.head = -0.35 + Math.sin(this.time * 2.2 + c.seed) * 0.15;
+    if (Math.random() < dt * 0.15 && Math.hypot(c.x - this.px, c.z - this.pz) < 30) this.host.say(c, pick(CHANT), 2.4);
+    if (f.voice <= 0) { f.voice = rand(5, 10); this.host.sound('gurgle', c); }
+    f.voice -= dt;
+    this.glow(c, f, 0);
     return true;
   }
 
@@ -677,6 +712,13 @@ export class NightDirector {
         if (t > 1.2 && c.aux === 0) { c.aux = 1; fx.puff(c.x + Math.sin(c.yaw) * 2, c.y + 0.3, c.z + Math.cos(c.yaw) * 2, 18); this.host.sound('hit', c); }
         if (t > 4) { c.y -= dt * 0.4; c.scale *= Math.max(0, 1 - dt * 0.6); }
         return t < 6.5;
+      }
+      case 'sink': {
+        // Slips down into the dark like into water, in a spray of droplets.
+        if (c.aux === 0) { c.aux = 1; for (let n = 0; n < 14; n++) fx.spark(c.x, c.y + 0.3, c.z, 0.45, 0.7, 0.65, 1, 1.5); }
+        c.y -= dt * 0.9;
+        c.tail = 2.2;
+        return t < 2.4;
       }
       default: {
         c.roll += ((Math.PI / 2) - c.roll) * Math.min(1, dt * 5);

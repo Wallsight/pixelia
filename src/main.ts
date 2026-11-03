@@ -16,6 +16,7 @@ import { Creatures } from './creatures/creatures';
 import { TowerBeacon } from './render/beacon';
 import { Soundscape } from './audio/soundscape';
 import { LegendBoard } from './render/legend-board';
+import { EldritchDirector } from './render/eldritch';
 import { villageLayout } from './world/village';
 import { IS_TOUCH, TouchControls } from './ui/touch';
 
@@ -94,6 +95,10 @@ creatures.npcs.news = () => {
   return n ? `Bir gezgin ${n} efsaneyi buldu! Panoya bakın!` : 'Efsaneler panosu meydanda, gezginler buyursun!';
 };
 const sound = new Soundscape(world, terrain, creatures);
+// Tentacles, eyes and the horizon colossus of the eldritch sea.
+const eldritch = new EldritchDirector(env, SHADOWS, terrain, creatures.fire);
+scene.add(eldritch.group);
+eldritch.onSound = (ev, at) => sound.eldritch(ev, at);
 discovery.onSound = (k) => sound.jingle(k);
 const camFwd = new THREE.Vector3(), camUp = new THREE.Vector3();
 
@@ -306,6 +311,8 @@ function frame(): void {
         (window as unknown as Record<string, unknown>).__night = (what: string) => creatures.nightDir.devSpawn(what);
         (window as unknown as Record<string, unknown>).__ninfo = () => creatures.nightDir.info();
         (window as unknown as Record<string, unknown>).__hour = (h: number) => { daynight.time = (h / 24) % 1; return daynight.clock(); };
+        (window as unknown as Record<string, unknown>).__eld = (what: string) => eldritch.dev(what);
+        (window as unknown as Record<string, unknown>).__einfo = () => eldritch.info();
         (window as unknown as Record<string, unknown>).__role = (role: string) => creatures.allNpcs().filter((c) => c.npc?.role === role)
           .map((c) => ({ task: c.npc!.task, next: c.npc!.next, ri: c.npc!.ri, route: c.npc!.route.length / 2, at: [Math.round(c.x), Math.round(c.z)] }));
         (window as unknown as Record<string, unknown>).__sound = () => { sound.start(); return sound.stats(); };
@@ -335,6 +342,7 @@ function frame(): void {
   legendBoard?.update(dt);
   if (spawned) {
     camera.getWorldDirection(camFwd);
+    eldritch.update(dt, camera.position, camFwd, daynight.night, focusSample);
     camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
     sound.update(dt, {
       camera, forward: camFwd, up: camUp, pos: player.position, vel: player.velocity,

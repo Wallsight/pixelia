@@ -476,3 +476,34 @@ export function mage(): Box[] {
     { s: [0.18, 0.18, 0.18], at: [0.33, 1.98, 0.16], c: '#9ae8ff', t: SL.FIXED, part: PART.ARM_R, pivot: armP(0.33) },
   ];
 }
+
+/** A hunched fish-man of the eldritch shore: big head, bulging eyes, fins and webbed claws. */
+export function deepone(): Box[] {
+  const scale = '#ffffff', belly = '#c8d8b0', eye = '#f0f0c0', fin = '#3a6a6a', hp: V3 = [0, 1.3, 0.05];
+  const legP = (x: number): V3 => [x, 0.66, 0];
+  const armP = (x: number): V3 => [x, 1.24, 0.05];
+  return [
+    { s: [0.2, 0.66, 0.22], at: [0.13, 0.33, 0], c: scale, part: PART.LEG_A, pivot: legP(0.13) },
+    { s: [0.2, 0.66, 0.22], at: [-0.13, 0.33, 0], c: scale, part: PART.LEG_B, pivot: legP(-0.13) },
+    { s: [0.26, 0.06, 0.36], at: [0.13, 0.03, 0.06], c: fin, t: SL.FIXED, part: PART.LEG_A, pivot: legP(0.13) }, // webbed feet
+    { s: [0.26, 0.06, 0.36], at: [-0.13, 0.03, 0.06], c: fin, t: SL.FIXED, part: PART.LEG_B, pivot: legP(-0.13) },
+    { s: [0.52, 0.62, 0.34], at: [0, 0.98, 0.04], c: scale },
+    { s: [0.38, 0.5, 0.04], at: [0, 0.95, 0.22], c: belly, t: SL.FIXED },
+    { s: [0.06, 0.5, 0.3], at: [0, 1.1, -0.24], c: fin, t: SL.FIXED }, // back fin
+    // Long arms ending in webbed claws.
+    { s: [0.14, 0.7, 0.16], at: [0.34, 0.92, 0.05], c: scale, part: PART.ARM_R, pivot: armP(0.34) },
+    { s: [0.14, 0.7, 0.16], at: [-0.34, 0.92, 0.05], c: scale, part: PART.ARM_L, pivot: armP(-0.34) },
+    { s: [0.2, 0.16, 0.06], at: [0.34, 0.52, 0.1], c: fin, t: SL.FIXED, part: PART.ARM_R, pivot: armP(0.34) },
+    { s: [0.2, 0.16, 0.06], at: [-0.34, 0.52, 0.1], c: fin, t: SL.FIXED, part: PART.ARM_L, pivot: armP(-0.34) },
+    // Head thrust forward: wide mouth, eyes on the sides, a crest fin.
+    { s: [0.46, 0.4, 0.5], at: [0, 1.48, 0.18], c: scale, part: PART.HEAD, pivot: hp },
+    { s: [0.38, 0.06, 0.04], at: [0, 1.36, 0.44], c: '#1a2a22', t: SL.FIXED, part: PART.HEAD, pivot: hp },
+    { s: [0.08, 0.14, 0.14], at: [0.25, 1.56, 0.3], c: eye, t: SL.FIXED, part: PART.HEAD, pivot: hp },
+    { s: [0.08, 0.14, 0.14], at: [-0.25, 1.56, 0.3], c: eye, t: SL.FIXED, part: PART.HEAD, pivot: hp },
+    { s: [0.04, 0.07, 0.07], at: [0.29, 1.56, 0.33], c: '#111111', t: SL.FIXED, part: PART.HEAD, pivot: hp },
+    { s: [0.04, 0.07, 0.07], at: [-0.29, 1.56, 0.33], c: '#111111', t: SL.FIXED, part: PART.HEAD, pivot: hp },
+    { s: [0.05, 0.22, 0.4], at: [0, 1.78, 0.1], c: fin, t: SL.FIXED, part: PART.HEAD, pivot: hp },
+    { s: [0.04, 0.2, 0.16], at: [0.25, 1.46, 0.08], c: fin, t: SL.FIXED, part: PART.HEAD, pivot: hp }, // gills
+    { s: [0.04, 0.2, 0.16], at: [-0.25, 1.46, 0.08], c: fin, t: SL.FIXED, part: PART.HEAD, pivot: hp },
+  ];
+}

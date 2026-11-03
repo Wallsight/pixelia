@@ -453,6 +453,42 @@ export function poof(e: AudioEngine, out: AudioNode, t: number): number {
   return burst(e, out, t, 'pink', 'lowpass', 500, 0.7, 0.02, 0.45, 0.6, 180);
 }
 
+// ------------------------------------------------------------------ eldritch
+
+/** Deep-one gurgle: a few bubbling low glides. */
+export function gurgle(e: AudioEngine, out: AudioNode, t: number): number {
+  let end = t;
+  for (let i = 0; i < 5; i++) {
+    const at = t + i * rnd(0.08, 0.16), f = rnd(140, 260);
+    end = Math.max(end, tone(e, out, at, 'sine', f, f * rnd(1.4, 2), 0.01, 0.2, 0.09));
+  }
+  burst(e, out, t, 'pink', 'bandpass', 420, 2, 0.05, 0.12, 0.5);
+  return end;
+}
+
+/** A tentacle breaking the surface: water churning over a sub-bass swell. */
+export function tentacleRise(e: AudioEngine, out: AudioNode, t: number): number {
+  burst(e, out, t, 'pink', 'bandpass', 700, 0.6, 0.6, 0.5, 2.2, 300);
+  grains(e, out, t + 0.3, 24, 2.2, 400, 1600, 0.25, 0.05);
+  return tone(e, out, t, 'sine', 42, 32, 0.8, 0.5, 3);
+}
+
+/** The colossus rising far away: a slow, dissonant drone swell felt more than heard. */
+export function colossusDrone(e: AudioEngine, out: AudioNode, t: number): number {
+  let end = t;
+  for (const [f, a] of [[33, 0.5], [41.5, 0.35], [49, 0.3], [69.3, 0.18], [98, 0.08]]) {
+    end = Math.max(end, tone(e, out, t + Math.random() * 0.6, 'sine', f, f * 0.97, 3.5, a, 6));
+  }
+  burst(e, out, t, 'brown', 'lowpass', 140, 0.7, 3, 0.6, 6);
+  return end;
+}
+
+/** A huge eye opening: a wet, creaking groan. */
+export function eyeOpen(e: AudioEngine, out: AudioNode, t: number): number {
+  grains(e, out, t, 30, 1.6, 120, 420, 0.3, 0.04);
+  return tone(e, out, t, 'sawtooth', 58, 46, 0.4, 0.12, 1.6);
+}
+
 /** A lute phrase: plucked triangle notes on a minor pentatonic, with a soft second string. */
 export function lute(e: AudioEngine, out: AudioNode, t: number, root: number, notes: number): number {
   const scale = [0, 3, 5, 7, 10, 12, 15];

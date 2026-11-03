@@ -27,9 +27,10 @@ const ENTRIES: Array<[number, string]> = [
   [LM.HOBBIT_HOLE, 'Hobbit'],
   [LM.MONOLITH, '2001: Uzay Destanı'],
   [LM.PHONE_BOX, 'Doctor Who'],
+  [LM.SUNKEN_TEMPLE, 'Lovecraft'],
 ];
 
-const W = 360, H = 392;
+const W = 360, H = 414;
 const BOARD_W = 3.2, BOARD_H = BOARD_W * (H / W);
 
 export class LegendBoard {

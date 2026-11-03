@@ -4,7 +4,7 @@
 // All designs are original pixel-art homages, not copies of any asset.
 
 import { hash01 } from '../engine/noise';
-import { B, HEIGHT } from './blocks';
+import { B, HEIGHT, SEA } from './blocks';
 import { C_AIR, C_FILL, C_KEEP, C_SURFACE, type CastlePlan } from './castle';
 import { BIOME } from './biomes';
 import { LM, type Landmark } from './structures';
@@ -471,6 +471,68 @@ function hobbitHole(pb: PlanBuilder): void {
   pb.text(2, 0, 9, 'Parti dışında giriş yasak', 0, 1, 'post');
 }
 
+/**
+ * A drowned temple of leaning, glyph-carved columns. The platform sits flush
+ * with the waterline; in its middle a dark mound hides a sleeper whose single
+ * eye (a live mesh, see render/eldritch.ts) opens now and then.
+ */
+function sunkenTemple(pb: PlanBuilder): void {
+  const top = Math.max(1, SEA - pb.floorY); // platform top level, relative to the floor
+  const R = 11;
+  const water = (y: number) => (pb.floorY + y <= SEA ? B.DEEP_WATER : C_AIR);
+  const stone = (x: number, y: number, z: number) => (pb.noise(x, y, z) < 0.18 ? B.GLYPH : B.ELDRITCH_STONE);
+  for (let z = -R; z <= R; z++) for (let x = -R; x <= R; x++) {
+    if (Math.abs(x) + Math.abs(z) > R + 5) continue; // cut corners
+    // Ragged edge: a few flagstones have sunk.
+    const edge = Math.max(Math.abs(x), Math.abs(z)) >= R - 1;
+    const h = edge && pb.noise(x, 0, z, 3) < 0.4 ? top - 1 : top;
+    for (let y = -6; y < 0; y++) pb.set(x, y, z, C_FILL);
+    for (let y = 0; y <= h; y++) pb.set(x, y, z, y === h && (x + z) % 4 === 0 ? B.GLYPH : B.ELDRITCH_STONE);
+    for (let y = h + 1; y <= top + 18; y++) pb.set(x, y, z, water(y));
+  }
+  // A ring of leaning columns, some broken off.
+  for (let k = 0; k < 10; k++) {
+    const a = (k / 10) * Math.PI * 2;
+    const cx = Math.round(Math.cos(a) * 8), cz = Math.round(Math.sin(a) * 8);
+    if (cz >= 6 && Math.abs(cx) <= 3) continue; // keep the gate side open
+    const H = 6 + Math.floor(pb.noise(cx, 1, cz) * 10);
+    const lx = pb.noise(cx, 2, cz) - 0.5, lz = pb.noise(cx, 4, cz) - 0.5;
+    for (let y = 1; y <= H; y++) {
+      const ox = Math.round(lx * y * 0.35), oz = Math.round(lz * y * 0.35);
+      for (const [dx, dz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) pb.set(cx + ox + dx, top + y, cz + oz + dz, stone(cx + dx, y, cz + dz));
+    }
+  }
+  // The gate: two twisted pillars and a cracked lintel, facing local +z.
+  for (let y = 1; y <= 11; y++) {
+    const tw = Math.round(Math.sin(y * 0.6));
+    pb.set(-4 + tw, top + y, 9, stone(-4, y, 9));
+    pb.set(4 - tw, top + y, 9, stone(4, y, 9));
+  }
+  for (let x = -5; x <= 5; x++) if (pb.noise(x, 12, 9) < 0.8) pb.set(x, top + 12, 9, x % 2 ? B.GLYPH : B.ELDRITCH_STONE);
+  // The sleeper's mound, with an eye socket facing the gate.
+  for (let z = -5; z <= 5; z++) for (let x = -5; x <= 5; x++) for (let y = 1; y <= 5; y++) {
+    if ((x * x) / 25 + (z * z) / 25 + ((y - 0.5) * (y - 0.5)) / 22 > 1) continue;
+    pb.set(x, top + y, z, pb.noise(x, y, z, 5) < 0.1 ? B.GLYPH : B.BASALT);
+  }
+  for (let x = -1; x <= 1; x++) for (let y = 2; y <= 3; y++) for (let z = 3; z <= 5; z++) pb.set(x, top + y, z, water(top + y));
+  pb.text(6, top, 11, 'Sonsuza dek yatabilen ölü değildir', 0, 1, 'post');
+}
+
+/** Where the sleeper's eye sits in a sunken temple (world coordinates and facing). */
+export function templeEye(lm: Landmark): { x: number; y: number; z: number; dx: number; dz: number } {
+  const top = Math.max(1, SEA - Math.floor(lm.h));
+  const rot = (x: number, z: number): [number, number] => {
+    switch (lm.rot) {
+      case 1: return [-z, x];
+      case 2: return [-x, -z];
+      case 3: return [z, -x];
+      default: return [x, z];
+    }
+  };
+  const [ox, oz] = rot(0, 4.6), [dx, dz] = rot(0, 1);
+  return { x: lm.x + ox + 0.5, y: Math.floor(lm.h) + top + 3, z: lm.z + oz + 0.5, dx, dz };
+}
+
 function phoneBox(pb: PlanBuilder): void {
   pb.level(4, 6);
   pb.box(0, 1, 0, 1, 3, 1, B.BOOTH_BLUE);
@@ -495,6 +557,7 @@ const BUILDERS: Record<number, { reach: number; up: number; build: (pb: PlanBuil
   [LM.MONOLITH]: { reach: 5, up: 12, build: monolith },
   [LM.HOBBIT_HOLE]: { reach: 11, up: 9, build: hobbitHole },
   [LM.PHONE_BOX]: { reach: 5, up: 7, build: phoneBox },
+  [LM.SUNKEN_TEMPLE]: { reach: 13, up: 36, build: sunkenTemple },
 };
 
 /** Largest reach of any landmark: how far around a chunk to look for them. */

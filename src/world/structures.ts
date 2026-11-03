@@ -236,6 +236,7 @@ export const LM = {
   MONOLITH: 12, // 2001
   HOBBIT_HOLE: 13, // Tolkien
   PHONE_BOX: 14, // Doctor Who
+  SUNKEN_TEMPLE: 15, // Lovecraft
 } as const;
 
 const GREEN = [BIOME.PLAINS, BIOME.FOREST, BIOME.BIRCH_FOREST];
@@ -257,6 +258,8 @@ const LANDMARK_TABLE: Array<{ kind: number; biomes: number[]; weight: number }> 
   { kind: LM.MONOLITH, biomes: [BIOME.DESERT, BIOME.PLAINS, BIOME.TUNDRA], weight: 0.8 },
   { kind: LM.HOBBIT_HOLE, biomes: [...GREEN], weight: 1.2 },
   { kind: LM.PHONE_BOX, biomes: [...GREEN, BIOME.TUNDRA], weight: 0.7 },
+  // Half drowned in the eldritch shallows (the only landmark allowed in water).
+  { kind: LM.SUNKEN_TEMPLE, biomes: [BIOME.ELDRITCH_SEA, BIOME.BLACK_BEACH], weight: 8 },
 ];
 
 export interface Landmark {
@@ -307,16 +310,18 @@ export class LandmarkMap {
   private tryAt(id: string, gx: number, gz: number, x: number, z: number): Landmark | null {
     const seed = this.terrain.seed;
     const s = this.terrain.sample(x, z);
-    if (s.h < SEA + 1 || s.crag > 0.05 || s.river > 0.05 || s.isle > 0) return null;
+    // Dry land only, except the sunken temple, which stands in the eldritch shallows.
+    const wet = s.h < SEA + 1;
+    if ((wet && !(s.biome === BIOME.ELDRITCH_SEA && s.h > SEA - 14)) || s.crag > 0.05 || s.river > 0.05 || s.isle > 0) return null;
     // Fairly level ground only (the Ashlands are jagged everywhere, so be lenient there).
-    const tol = s.biome === BIOME.ASHLANDS ? 10 : 5;
+    const tol = s.biome === BIOME.ASHLANDS ? 10 : wet ? 7 : 5;
     for (const [dx, dz] of [[9, 0], [-9, 0], [0, 9], [0, -9]]) {
       if (Math.abs(this.terrain.sample(x + dx, z + dz).h - s.h) > tol) return null;
     }
     if (this.sites.sitesNear(x - 70, z - 70, x + 70, z + 70, 0).length) return null;
     // Settlements spread further than castles.
     if (this.sites.sitesNear(x - 125, z - 125, x + 125, z + 125, 0).some((o) => o.kind >= SITE_VILLAGE && Math.hypot(o.x - x, o.z - z) < (o.kind === SITE_CITY ? 125 : 75))) return null;
-    const options = LANDMARK_TABLE.filter((o) => o.kind !== LM.DARK_TOWER && o.biomes.includes(s.biome as never));
+    const options = LANDMARK_TABLE.filter((o) => o.kind !== LM.DARK_TOWER && o.biomes.includes(s.biome as never) && (!wet || o.kind === LM.SUNKEN_TEMPLE));
     if (!options.length) return null;
     let r = hash01(gx, 1203, gz, seed) * options.reduce((a, o) => a + o.weight, 0);
     let kind = options[0].kind;
