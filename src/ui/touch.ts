@@ -36,6 +36,7 @@ export class TouchControls {
   onMapZoom: ((dir: number) => void) | null = null;
   private jumpBtn!: HTMLButtonElement;
   private flyBtn!: HTMLButtonElement;
+  private shownFly: boolean | null = null;
 
   constructor(private player: PlayerController, actions: TouchActions) {
     this.el = document.createElement('div');
@@ -98,9 +99,11 @@ export class TouchControls {
     else this.syncFly();
   }
 
-  /** Fly mode turns ZIPLA into "up" and shows the "down" button. */
+  /** Fly mode turns ZIPLA into "up" and shows the "down" button. Cheap when nothing changed. */
   syncFly(): void {
     const f = this.player.flying;
+    if (f === this.shownFly) return;
+    this.shownFly = f;
     this.el.classList.toggle('flying', f);
     this.flyBtn.classList.toggle('on', f);
     this.jumpBtn.textContent = f ? 'YUKARI' : 'ZIPLA';

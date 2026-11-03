@@ -16,6 +16,11 @@ const FLY = 24;
 const EPS = 1e-4;
 const NO_KEYS: ReadonlySet<string> = new Set();
 
+/** True if this browser has the Pointer Lock API at all (most phones do not). */
+export function canPointerLock(): boolean {
+  return typeof (HTMLElement.prototype as { requestPointerLock?: unknown }).requestPointerLock === 'function';
+}
+
 export class PlayerController {
   readonly position = new THREE.Vector3();
   readonly velocity = new THREE.Vector3();
@@ -68,11 +73,6 @@ export class PlayerController {
     });
   }
 
-  /** True if this browser has the Pointer Lock API at all (phones usually do not). */
-  get canLock(): boolean {
-    return typeof (this.dom as { requestPointerLock?: unknown }).requestPointerLock === 'function';
-  }
-
   /** Drops held keys and stick input, e.g. when play is paused without a pointer-lock change. */
   clearInput(): void {
     this.keys.clear();
@@ -81,15 +81,15 @@ export class PlayerController {
     this.touchDown = false;
   }
 
-  /** Asks for pointer lock; returns false if the API is missing so the caller can fall back. */
-  requestLock(): boolean {
+  /** Asks for pointer lock; calls onFail if the API is missing or the browser refuses the lock. */
+  requestLock(onFail: () => void): void {
     const el = this.dom as HTMLElement & { requestPointerLock?(o?: { unadjustedMovement?: boolean }): Promise<void> | void };
-    if (!this.canLock) return false;
+    if (!canPointerLock()) { onFail(); return; }
     const fallback = (): void => {
       try {
         const p = el.requestPointerLock!();
-        if (p && typeof (p as Promise<void>).catch === 'function') (p as Promise<void>).catch(() => {});
-      } catch { /* pointer lock unavailable */ }
+        if (p && typeof (p as Promise<void>).catch === 'function') (p as Promise<void>).catch(onFail);
+      } catch { onFail(); }
     };
     try {
       const p = el.requestPointerLock({ unadjustedMovement: true });
@@ -97,7 +97,6 @@ export class PlayerController {
     } catch {
       fallback();
     }
-    return true;
   }
 
   /** Touch joystick input; values are clamped to the unit circle. */

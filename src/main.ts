@@ -9,7 +9,7 @@ import { Atmosphere } from './render/atmosphere';
 import { World } from './world/world';
 import { Terrain, BIOME, BIOME_NAMES_TR, type ColumnSample } from './world/terrain';
 import { SEA } from './world/blocks';
-import { PlayerController } from './player/controller';
+import { PlayerController, canPointerLock } from './player/controller';
 import { WorldMap } from './ui/map';
 import { Discovery } from './ui/discovery';
 import { Creatures } from './creatures/creatures';
@@ -24,10 +24,10 @@ const intParam = (name: string, fallback: number, lo: number, hi: number): numbe
   if (raw === null || !/^-?\d{1,10}$/.test(raw)) return fallback;
   return Math.min(hi, Math.max(lo, parseInt(raw, 10)));
 };
-/** Browsers without the Pointer Lock API (most phones) can only be played with touch controls. */
-const NO_LOCK = typeof (HTMLElement.prototype as { requestPointerLock?: unknown }).requestPointerLock !== 'function';
-/** Phones and tablets get touch controls and lighter defaults; ?touch forces it on desktop. */
-const TOUCH = IS_TOUCH || NO_LOCK || params.has('touch');
+/** ?touch forces touch controls, even when Start is clicked with a mouse (for testing on desktop). */
+const FORCE_TOUCH = params.has('touch');
+/** Phones and tablets get touch controls and lighter defaults; browsers without pointer lock need them too. */
+const TOUCH = IS_TOUCH || !canPointerLock() || FORCE_TOUCH;
 const SEED = intParam('seed', 20261102, -2147483648, 2147483647) >>> 0;
 const RENDER_DISTANCE = intParam('rd', TOUCH ? 8 : 12, 4, 24);
 const SHADOWS = intParam('shadows', 1, 0, 1) === 1;
@@ -160,10 +160,17 @@ const touch = TOUCH
   : null;
 /** True while playing with touch controls (false when a touch-capable device starts with a mouse). */
 let touchMode = false;
+/** Pointer type of the last press on the Start button ('' for keyboard activation). */
+let startPointer = '';
+/** The `touch` body class picks touch or keyboard hints and layout; it follows the mode actually in use. */
+const setTouchLayout = (on: boolean): void => {
+  document.body.classList.toggle('touch', on);
+  worldMap.setTouch(on);
+};
 if (touch) {
   touch.onMapPan = (dx, dy) => worldMap.pan(dx, dy);
   touch.onMapZoom = (dir) => worldMap.zoom(dir);
-  document.body.classList.add('touch');
+  setTouchLayout(true);
   // Pause when the app goes to the background (tab switch, screen off).
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && player.locked && touchMode) pauseUnlocked();
@@ -180,18 +187,24 @@ function requestFullscreen(): void {
   } catch { /* fullscreen is optional */ }
 }
 
-startBtn.addEventListener('click', (e) => {
-  sound.start();
-  // A mouse click on a touch-capable device (convertible, tablet + mouse) still gets pointer-lock mouse look.
-  const viaMouse = (e as PointerEvent).pointerType === 'mouse';
-  touchMode = !!touch && !(viaMouse && player.canLock);
-  worldMap.setTouch(touchMode);
-  if (!touchMode && player.requestLock()) return;
+/** Starts play without pointer lock: touch controls, or plain mouse movement if the lock was refused. */
+function startUnlocked(): void {
   if (touchMode) requestFullscreen();
-  // No pointer lock available: play unlocked (touch controls, or plain mouse movement).
-  touchMode = !!touch;
   player.locked = true;
   setActive(true);
+}
+
+startBtn.addEventListener('pointerdown', (e) => { startPointer = e.pointerType; });
+startBtn.addEventListener('click', () => {
+  sound.start();
+  // Only a finger (or pen) picks touch controls; a mouse, trackpad or keyboard press on a
+  // touch-capable device still gets pointer-lock mouse look when the browser supports it.
+  const byFinger = startPointer === 'touch' || startPointer === 'pen';
+  startPointer = '';
+  touchMode = !!touch && (FORCE_TOUCH || byFinger || !canPointerLock());
+  if (touch) setTouchLayout(touchMode);
+  if (touchMode) startUnlocked();
+  else player.requestLock(startUnlocked);
 });
 document.addEventListener('pointerlockchange', () => setActive(player.locked));
 window.addEventListener('keydown', (e) => {
@@ -294,6 +307,7 @@ function frame(): void {
     }
   }
   player.update(dt);
+  if (touchMode) touch?.syncFly();
   if (spawned && !worldMap.open) creatures.update(dt, player.position.x, player.position.z, daynight.night, camera.position);
   if (spawned) discovery.update(dt, player.position.x, player.position.z);
   if (spawned) {
