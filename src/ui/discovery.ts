@@ -75,7 +75,7 @@ export class Discovery {
     this.rumors.add(id);
     this.dirty = true;
     this.onSound?.('rumor');
-    this.toast('Duyduğun bir söylenti', 'Haritaya işaretlendi (?)', '');
+    this.toast('Duyduğun bir söylenti', 'Haritaya işaretlendi (?)', '', 'SÖYLENTİ');
   }
 
   get total(): number { return this.found.size; }

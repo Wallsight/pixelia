@@ -367,6 +367,20 @@ export function snore(e: AudioEngine, out: AudioNode, t: number, scale: number):
 
 // ------------------------------------------------------------------ town
 
+/** A lute phrase: plucked triangle notes on a minor pentatonic, with a soft second string. */
+export function lute(e: AudioEngine, out: AudioNode, t: number, root: number, notes: number): number {
+  const scale = [0, 3, 5, 7, 10, 12, 15];
+  let end = t, step = Math.floor(rnd(0, 4));
+  for (let i = 0; i < notes; i++) {
+    step = Math.max(0, Math.min(scale.length - 1, step + Math.round(rnd(-2, 2))));
+    const f = root * Math.pow(2, scale[step] / 12);
+    const at = t + i * 0.24 + (i % 2 ? 0.02 : 0);
+    tone(e, out, at, 'triangle', f, f * 0.995, 0.003, 0.16, 0.5);
+    end = Math.max(end, tone(e, out, at, 'sine', f * 2, f * 1.99, 0.002, 0.05, 0.25));
+  }
+  return end;
+}
+
 /** Struck bell: inharmonic partials with long, staggered decays. */
 export function bell(e: AudioEngine, out: AudioNode, t: number, f0: number, vol: number): number {
   const parts: Array<[number, number, number]> = [

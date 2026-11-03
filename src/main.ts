@@ -15,6 +15,8 @@ import { Discovery } from './ui/discovery';
 import { Creatures } from './creatures/creatures';
 import { TowerBeacon } from './render/beacon';
 import { Soundscape } from './audio/soundscape';
+import { LegendBoard } from './render/legend-board';
+import { villageLayout } from './world/village';
 import { IS_TOUCH, TouchControls } from './ui/touch';
 
 // ------------------------------------------------------------ settings
@@ -76,6 +78,21 @@ const beacon = terrain.tower
   ? new TowerBeacon(env, terrain.tower.x, terrain.tower.z, Math.floor(terrain.sample(terrain.tower.x, terrain.tower.z).h))
   : null;
 if (beacon) scene.add(beacon.group);
+// The legends board on the city square ticks off the pop-culture places the player has found.
+const legendBoard = (() => {
+  const cc = terrain.structures.city();
+  const city = cc && terrain.structures.site(cc[0], cc[1]);
+  const spot = city && villageLayout(terrain, city).board;
+  if (!spot) return null;
+  const b = new LegendBoard(env, SHADOWS, terrain, discovery, spot);
+  scene.add(b.group);
+  return b;
+})();
+creatures.npcs.news = () => {
+  const n = legendBoard?.foundCount ?? 0;
+  if (Math.random() < 0.5) return null;
+  return n ? `Bir gezgin ${n} efsaneyi buldu! Panoya bakın!` : 'Efsaneler panosu meydanda, gezginler buyursun!';
+};
 const sound = new Soundscape(world, terrain, creatures);
 discovery.onSound = (k) => sound.jingle(k);
 const camFwd = new THREE.Vector3(), camUp = new THREE.Vector3();
@@ -286,6 +303,8 @@ function frame(): void {
         };
         (window as unknown as Record<string, unknown>).__dinfo = () => creatures.dragonInfo();
         (window as unknown as Record<string, unknown>).__counts = () => creatures.counts();
+        (window as unknown as Record<string, unknown>).__role = (role: string) => creatures.allNpcs().filter((c) => c.npc?.role === role)
+          .map((c) => ({ task: c.npc!.task, next: c.npc!.next, ri: c.npc!.ri, route: c.npc!.route.length / 2, at: [Math.round(c.x), Math.round(c.z)] }));
         (window as unknown as Record<string, unknown>).__sound = () => { sound.start(); return sound.stats(); };
         (window as unknown as Record<string, unknown>).__meter = () => sound.engine.meter();
         (window as unknown as Record<string, unknown>).__sfx = (n: string) => sound.demo(n);
@@ -310,6 +329,7 @@ function frame(): void {
   if (touchMode) touch?.syncFly();
   if (spawned && !worldMap.open) creatures.update(dt, player.position.x, player.position.z, daynight.night, camera.position);
   if (spawned) discovery.update(dt, player.position.x, player.position.z);
+  legendBoard?.update(dt);
   if (spawned) {
     camera.getWorldDirection(camFwd);
     camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);

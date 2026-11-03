@@ -47,7 +47,7 @@ const SPECIES: SpeciesDef[] = [
   { name: 'dragon', model: M.dragon, max: 3, habitat: 'dragon', biomes: [], group: [1, 1], speed: 16, scale: [0.8, 1.15], tints: ['#ffffff', '#a8c4ff', '#c8f0a8', '#ffd08a'], shadow: true, time: 0 },
   // People (spawned by the NPC director, not by biome).
   ...([['villager', M.villager, 40], ['farmer', M.farmer, 16], ['merchant', M.merchant, 20], ['elder', M.elder, 12],
-    ['guard', M.guard, 10], ['kid', M.kid, 20], ['traveler', M.traveler, 6]] as Array<[Role, () => Box[], number]>).map(([name, model, max]): SpeciesDef => ({
+    ['guard', M.guard, 10], ['kid', M.kid, 20], ['traveler', M.traveler, 6], ['bard', M.bard, 2], ['crier', M.crier, 2]] as Array<[Role, () => Box[], number]>).map(([name, model, max]): SpeciesDef => ({
     name, model, max, habitat: 'npc', biomes: [], group: [1, 1], speed: 1.3, scale: [1, 1], tints: ['#ffffff'], shadow: true, time: 0,
   })),
 ];
@@ -903,6 +903,8 @@ export class Creatures implements NpcHost {
     c.tint3.set(role === 'elder' ? '#d8d8d8' : HAIR[Math.floor(r(3) * HAIR.length)]);
     if (role === 'traveler') c.tint2.set(['#5a6a4a', '#6a4a3a', '#4a5a6a', '#7a6a5a'][Math.floor(r(4) * 4)]);
     if (role === 'guard') { c.tint.set('#5a6aa0'); c.tint2.set('#3a3a4a'); }
+    if (role === 'bard') { c.tint.set('#8a4ab0'); c.tint2.set('#3a8a5a'); }
+    if (role === 'crier') { c.tint.set('#b03a3a'); c.tint2.set('#2a2430'); }
     c.skin = r(5) * 0.85;
     c.scale = role === 'kid' ? 0.6 + r(6) * 0.08 : 0.94 + r(6) * 0.1;
     rt.list.push(c);

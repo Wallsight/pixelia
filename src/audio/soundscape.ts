@@ -141,7 +141,15 @@ export class Soundscape {
     const e = this.engine;
     if (!e.ready) return;
     const at: [number, number, number] = [c.x, c.y + 1.2 * c.scale, c.z];
-    if (ev === 'say' && c.npc && text) {
+    if (ev === 'say' && c.npc && text && c.npc.role === 'bard' && text.includes('♪')) {
+      // The bard's songs sound as a lute phrase rather than speech.
+      at[1] = c.y + 1.1 * c.scale;
+      this.play(at, 'voice', 3, 0.12, 36, 1, (o, t) => X.lute(e, o, t, 196, 12));
+    } else if (ev === 'say' && c.npc && text && c.npc.role === 'crier' && c.npc.li === 0) {
+      at[1] = c.y + 1 * c.scale;
+      this.play(at, 'sfx', 3, 0.1, 50, 0.9, (o, t) => { X.bell(e, o, t, 1320, 0.5); return X.bell(e, o, t + 0.45, 1100, 0.5); });
+      this.play([c.x, c.y + 1.6 * c.scale, c.z], 'voice', 3, 0.1, 32, 0.9, (o, t) => X.babble(e, o, t + 0.9, text, 140));
+    } else if (ev === 'say' && c.npc && text) {
       const r = c.npc.role, k = (c.seed % 1000) / 1000;
       const f0 = r === 'kid' ? 290 + k * 70 : r === 'elder' ? 118 + k * 30 : r === 'guard' ? 98 + k * 25
         : r === 'merchant' ? 150 + k * 50 : k < 0.5 ? 108 + k * 70 : 175 + (k - 0.5) * 120;

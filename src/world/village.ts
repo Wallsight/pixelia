@@ -55,6 +55,11 @@ export interface Layout {
   stalls: Spot[];
   lamps: Spot[];
   benches: Spot[];
+  /** City only: the legends notice board on the square (faces the centre), banner poles, flower beds, the bard's spot. */
+  board: Spot | null;
+  banners: Spot[];
+  flowers: Spot[];
+  stage: Spot | null;
 }
 
 export interface VillagePlan extends CastlePlan {
@@ -200,7 +205,7 @@ function buildLayout(t: Terrain, site: Site): Layout {
         const fx0 = -nx, fz0 = -nz;
         const [fx, fz] = Math.abs(fx0) > Math.abs(fz0) ? [Math.sign(fx0), 0] : [0, Math.sign(fz0)];
         const r1 = hash01(si * 31 + k, 2201, site.gx, seed), r2 = hash01(si * 31 + k, 2202, site.gx, seed);
-        const nearCentre = s < (city ? 30 : 18);
+        const nearCentre = s < (city ? 52 : 18);
         let kind: HouseKind = 'home';
         if (special.length && nearCentre && r1 < 0.7) kind = special[0][0];
         else if (city && r1 < 0.45) kind = 'tall';
@@ -283,6 +288,46 @@ function buildLayout(t: Terrain, site: Site): Layout {
     });
   }
 
+  // --- the city's farm belt: fields in a ring just outside the houses, clear of the roads
+  if (city && style !== 'sand') {
+    const roads = t.structures.roadsOf(site);
+    const offRoad = (x: number, z: number, d: number) => !roads.some((rd) => segDist(x, z, rd.pts)[0] < d);
+    for (const r of [radius + 8, radius + 18]) {
+      for (let i = 0; i < 28 && fields.length < 10; i++) {
+        const a = rnd(9) * 6.28 + (i / 28) * Math.PI * 2;
+        const hw = 4, hd = 3 + Math.floor(hash01(i, 2310 + r, site.gx, seed) * 2);
+        const cx = Math.round(site.x + Math.cos(a) * r), cz = Math.round(site.z + Math.sin(a) * r);
+        const x0 = cx - hw - 1, x1 = cx + hw + 1, z0 = cz - hd - 1, z1 = cz + hd + 1;
+        if (!free(x0 - 2, z0 - 2, x1 + 2, z1 + 2)) continue;
+        if ([[x0, z0], [x1, z0], [x0, z1], [x1, z1], [cx, cz]].some(([qx, qz]) => nearStreet(qx, qz, 3) || !offRoad(qx, qz, 4))) continue;
+        const y = ground(x0, z0, x1, z1, 3);
+        if (y === null) continue;
+        taken.push([x0, z0, x1, z1]);
+        // Farmers walk in from the nearest street end.
+        let best = 1e9, si = 0, sAlong = 0;
+        streets.forEach((st, k) => { const [d, s] = segDist(cx, cz, st.pts); if (d < best) { best = d; si = k; sAlong = s; } });
+        const [ex, ez] = pointAlong(streets[si].pts, sAlong);
+        fields.push({ cx, cz, hw, hd, y, crop: hash01(cx, 2301, cz, seed) < 0.6 ? B.WHEAT : B.CARROTS, street: si, s: sAlong, entryX: ex, entryZ: ez });
+      }
+    }
+  }
+
+  // The legends board: north side of the square first, so it shows behind the fountain from the spawn.
+  let board: Spot | null = null;
+  if (city) {
+    for (let k = 0; k < 32 && !board; k++) {
+      const a = -Math.PI / 2 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.19;
+      const x = Math.round(site.x + Math.cos(a) * (plazaR - 1.5)), z = Math.round(site.z + Math.sin(a) * (plazaR - 1.5));
+      const fx0 = site.x - x, fz0 = site.z - z;
+      const [fx, fz] = Math.abs(fx0) > Math.abs(fz0) ? [Math.sign(fx0), 0] : [0, Math.sign(fz0)];
+      const ok = (qx: number, qz: number, d: number) =>
+        !streets.some((s) => segDist(qx, qz, s.pts)[0] < d);
+      if (!ok(x, z, 3) || !ok(x - fz * 2, z + fx * 2, 2.6) || !ok(x + fz * 2, z - fx * 2, 2.6)) continue;
+      // Keep clear of the city's junction signpost (stamp.ts puts it at +8, -8 from the centre).
+      if (Math.hypot(x - site.x - 8, z - site.z + 8) < 4.5) continue;
+      board = { x, z, y: floorY, fx, fz };
+    }
+  }
   // --- market stalls and benches around the square
   const stalls: Spot[] = [];
   const benches: Spot[] = [];
@@ -293,6 +338,7 @@ function buildLayout(t: Terrain, site: Site): Layout {
     const x = Math.round(site.x + Math.cos(a) * r), z = Math.round(site.z + Math.sin(a) * r);
     if (streets.some((s) => segDist(x, z, s.pts)[0] < 2.6)) continue;
     if (stalls.some((o) => Math.hypot(o.x - x, o.z - z) < 4)) continue;
+    if (board && Math.hypot(board.x - x, board.z - z) < 4) continue;
     const fx0 = site.x - x, fz0 = site.z - z;
     const [fx, fz] = Math.abs(fx0) > Math.abs(fz0) ? [Math.sign(fx0), 0] : [0, Math.sign(fz0)];
     stalls.push({ x, z, y: floorY, fx, fz });
@@ -301,7 +347,47 @@ function buildLayout(t: Terrain, site: Site): Layout {
     const a = rnd(8) * 6.28 + i * 1.9;
     const x = Math.round(site.x + Math.cos(a) * (plazaR - 1)), z = Math.round(site.z + Math.sin(a) * (plazaR - 1));
     if (streets.some((s) => segDist(x, z, s.pts)[0] < 2.2) || stalls.some((o) => Math.hypot(o.x - x, o.z - z) < 3)) continue;
+    if (board && Math.hypot(board.x - x, board.z - z) < 3.5) continue;
     benches.push({ x, z, y: floorY, fx: 0, fz: 0 });
+  }
+
+  // --- city square dressing: banner poles, flower beds and the bard's spot
+  let stage: Spot | null = null;
+  const banners: Spot[] = [], flowers: Spot[] = [];
+  if (city) {
+    const clearOf = (x: number, z: number, d: number) =>
+      !streets.some((s) => segDist(x, z, s.pts)[0] < d) &&
+      ![...stalls, ...benches, ...banners].some((o) => Math.hypot(o.x - x, o.z - z) < d);
+    const facing = (x: number, z: number): [number, number] => {
+      const fx0 = site.x - x, fz0 = site.z - z;
+      return Math.abs(fx0) > Math.abs(fz0) ? [Math.sign(fx0), 0] : [0, Math.sign(fz0)];
+    };
+    for (let i = 0; i < 32 && banners.length < 6; i++) {
+      const a = rnd(11) * 6.28 + i * 0.2;
+      const x = Math.round(site.x + Math.cos(a) * (plazaR + 0.5)), z = Math.round(site.z + Math.sin(a) * (plazaR + 0.5));
+      if (!clearOf(x, z, 2.6) || (board && Math.hypot(board.x - x, board.z - z) < 4.5)) continue;
+      const [fx, fz] = facing(x, z);
+      banners.push({ x, z, y: floorY, fx, fz });
+    }
+    // Flower beds (2x2) inside the square, clear of the paths through it.
+    for (let k = 0; k < 48 && flowers.length < 4; k++) {
+      const a = rnd(13) * 6.28 + k * 0.33, r = k % 2 ? 6.5 : 8.5;
+      const x = Math.round(site.x + Math.cos(a) * r) - 1, z = Math.round(site.z + Math.sin(a) * r) - 1;
+      const cells = [[x, z], [x + 1, z], [x, z + 1], [x + 1, z + 1]];
+      if (cells.some(([qx, qz]) => streets.some((s) => segDist(qx + 0.5, qz + 0.5, s.pts)[0] < 2.2))) continue;
+      if ([...stalls, ...benches, ...flowers].some((o) => Math.hypot(o.x - x, o.z - z) < 3.2)) continue;
+      if (board && Math.hypot(board.x - x, board.z - z) < 4) continue;
+      flowers.push({ x, z, y: floorY, fx: 0, fz: 0 });
+    }
+    // The bard plays on the square, away from the stalls, the board and the spawn spot.
+    for (let i = 0; i < 16 && !stage; i++) {
+      const a = rnd(12) * 6.28 + i * 0.4;
+      const x = site.x + Math.cos(a) * (plazaR - 3.2), z = site.z + Math.sin(a) * (plazaR - 3.2);
+      if ([...stalls, ...flowers].some((o) => Math.hypot(o.x - x, o.z - z) < 3) || (board && Math.hypot(board.x - x, board.z - z) < 4)) continue;
+      if (Math.hypot(x - site.x, z - site.z - 6.5) < 4) continue;
+      const [fx, fz] = facing(x, z);
+      stage = { x, z, y: floorY, fx, fz };
+    }
   }
 
   // --- lamp posts along the streets
@@ -318,7 +404,7 @@ function buildLayout(t: Terrain, site: Site): Layout {
     }
   });
 
-  return { site, city, floorY, radius, plazaR, style, streets, houses, fields, stalls, lamps, benches };
+  return { site, city, floorY, radius, plazaR, style, streets, houses, fields, stalls, lamps, benches, board, banners, flowers, stage };
 }
 
 // ------------------------------------------------------------------ voxels
@@ -374,7 +460,7 @@ class Grid {
 
 export function buildVillagePlan(t: Terrain, site: Site): VillagePlan {
   const L = villageLayout(t, site);
-  const reach = L.radius + 10;
+  const reach = L.radius + (L.city ? 28 : 10);
   const g = new Grid(L, reach);
   const texts: SignRecord[] = [];
   const seed = t.seed;
@@ -443,6 +529,24 @@ export function buildVillagePlan(t: Terrain, site: Site): VillagePlan {
     g.set(st.x, Y + 1, st.z, n(st.x, 2, st.z) < 0.5 ? B.CRATE : B.HAY);
   }
   for (const b of L.benches) g.set(b.x, Y + 1, b.z, half(B.PLANKS));
+  // Legends board posts (the board itself is a live mesh drawn on the main thread).
+  if (L.board) {
+    const b = L.board;
+    for (const side of [-2, 2]) for (let y = 1; y <= 5; y++) g.set(b.x - b.fz * side, Y + y, b.z + b.fx * side, B.DARK_PLANKS);
+  }
+  // Banner poles with a two-block flag hanging off the side.
+  L.banners.forEach((p, i) => {
+    for (let y = 1; y <= 6; y++) g.set(p.x, Y + y, p.z, B.OAK_LOG);
+    g.set(p.x, Y + 7, p.z, B.LANTERN);
+    const cloth = i % 2 ? B.CLOTH_RED : B.CLOTH_YELLOW;
+    for (const y of [5, 6]) g.set(p.x - p.fz, Y + y, p.z + p.fx, cloth);
+  });
+  // Flower beds: a 2x2 patch of grass with mixed flowers.
+  const blooms = [B.FLOWER_RED, B.FLOWER_YELLOW, B.FLOWER_BLUE, B.FLOWER_WHITE];
+  for (const f of L.flowers) for (const [dx, dz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+    g.set(f.x + dx, Y, f.z + dz, B.GRASS);
+    g.set(f.x + dx, Y + 1, f.z + dz, blooms[Math.floor(n(f.x + dx, 13, f.z + dz) * 4)]);
+  }
 
   // Lamps.
   for (const l of L.lamps) {

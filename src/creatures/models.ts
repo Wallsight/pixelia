@@ -242,6 +242,31 @@ export function guard(): Box[] {
 
 export function kid(): Box[] { return body(); }
 
+export function bard(): Box[] {
+  return [
+    ...body(),
+    // Floppy cap with a feather.
+    { s: [0.48, 0.14, 0.48], at: [0, 1.84, 0], c: '#ffffff', t: SL.TINT2, part: PART.HEAD, pivot: headPivot },
+    { s: [0.04, 0.3, 0.1], at: [0.2, 2.0, -0.1], c: '#f2e8a0', t: SL.FIXED, part: PART.HEAD, pivot: headPivot },
+    // Lute held across the chest: round body, neck, peg box.
+    { s: [0.3, 0.34, 0.12], at: [-0.08, 0.98, 0.22], c: '#b07a40', t: SL.FIXED },
+    { s: [0.1, 0.1, 0.13], at: [-0.08, 0.98, 0.29], c: '#4a3020', t: SL.FIXED },
+    { s: [0.07, 0.07, 0.42], at: [-0.22, 1.18, 0.2], c: '#7a5030', t: SL.FIXED },
+  ];
+}
+
+export function crier(): Box[] {
+  return [
+    ...body({ long: true }),
+    // Tricorn hat and a hand bell in the right hand.
+    { s: [0.56, 0.08, 0.52], at: [0, 1.82, 0], c: '#2a2430', t: SL.FIXED, part: PART.HEAD, pivot: headPivot },
+    { s: [0.38, 0.16, 0.36], at: [0, 1.92, 0], c: '#2a2430', t: SL.FIXED, part: PART.HEAD, pivot: headPivot },
+    { s: [0.06, 0.04, 0.4], at: [0, 1.87, 0], c: '#d8b04a', t: SL.FIXED, part: PART.HEAD, pivot: headPivot },
+    { s: [0.05, 0.16, 0.05], at: [0.33, 0.62, 0.06], c: '#6a4a2a', t: SL.FIXED, part: PART.ARM_R, pivot: [0.33, 1.32, 0] },
+    { s: [0.16, 0.16, 0.16], at: [0.33, 0.48, 0.06], c: '#e0b84a', t: SL.FIXED, part: PART.ARM_R, pivot: [0.33, 1.32, 0] },
+  ];
+}
+
 export function traveler(): Box[] {
   return [
     ...body({ hair: false, long: true }),

@@ -12,8 +12,8 @@ import { villageLayout, type House, type Layout, type Spot } from '../world/vill
 import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
 
-export type Role = 'villager' | 'farmer' | 'merchant' | 'elder' | 'guard' | 'kid' | 'traveler';
-type Task = 'idle' | 'walk' | 'chat' | 'work' | 'sell' | 'buy' | 'visit' | 'play' | 'patrol' | 'travel' | 'home';
+export type Role = 'villager' | 'farmer' | 'merchant' | 'elder' | 'guard' | 'kid' | 'traveler' | 'bard' | 'crier';
+type Task = 'idle' | 'walk' | 'chat' | 'work' | 'sell' | 'buy' | 'visit' | 'play' | 'patrol' | 'travel' | 'home' | 'perform' | 'listen' | 'announce';
 
 export interface NpcState {
   role: Role;
@@ -87,6 +87,19 @@ const SELL: string[][] = [
 const CALLS = ['Taze ekmek, sıcak ekmek!', 'Kumaşlar, baharatlar!', 'Elmalar tatlı, armutlar ballı!', 'Gel vatandaş, gel!', 'Bugün indirim var!'];
 const KIDS = ['Ebe sensin!', 'Yakalayamazsın!', 'Hahaha!', 'Bekle beni!', 'Sobe!'];
 const GUARD = ['Her şey yolunda.', 'Gözüm üstünüzde.', 'Ejderha görünürse çanı çalın!'];
+const SONGS: string[][] = [
+  ['♪ Dağlardan indi kanatlı ejder ♪', '♫ Külkent\'in çanı çaldı derinden ♫', '♪ Kahraman yok, ama çorba sıcak! ♪'],
+  ['♪ Kara kulede bir göz uyanmış ♪', '♫ Bakma ona, sakın bakma ♫', '♪ Sen yürü, yolun açık olsun ♪'],
+  ['♫ Hanın ateşi, dostun sesi ♫', '♪ Bir türkü daha, bir kadeh daha ♪', '♫ Yarın yine yollardayız ♫'],
+  ['♪ Taşa saplı ışıktan kılıç ♪', '♫ Çeken olmadı, çekecek kim? ♫', '♪ Belki sen, ey yolcu, belki sen ♪'],
+];
+const APPLAUSE = ['Bravo!', 'Bir daha!', 'Çok güzel!', 'Yaşa ozan!', '*alkış*'];
+const CRIES = [
+  ['Duyduk duymadık demeyin!', 'Pazar bugün meydanda kurulmuştur!'],
+  ['Duyduk duymadık demeyin!', 'Ejderha görenler belediyeye bildirsin!'],
+  ['Ahali, kulak verin!', 'Hasat şenliği bu akşam handa!'],
+  ['Ahali, kulak verin!', 'Kayıp bir keçi aranmaktadır, adı Pamuk!'],
+];
 
 const LM_HINT: Record<number, string> = {
   [LM.GRAVEYARD]: 'eski bir mezarlık', [LM.PLATFORM]: 'duvara açılan gizli bir peron', [LM.WILLOW]: 'dalları kımıldayan bir söğüt',
@@ -210,6 +223,8 @@ export class NpcDirector {
   private player = new THREE.Vector3();
   /** Called when the player overhears gossip about a place (its discovery id). */
   onRumor: ((id: string) => void) | null = null;
+  /** Live news for the town crier (e.g. how many legends the traveller has found). */
+  news: (() => string | null) | null = null;
 
   constructor(private terrain: Terrain, private host: NpcHost) {}
 
@@ -260,6 +275,8 @@ export class NpcDirector {
       }
     }
     for (let i = 0; i < (L.city ? 6 : 1); i++) add('guard', null, k++);
+    // The city has a bard on the square and a town crier.
+    if (L.city) { add('bard', pick(L.houses) ?? null, k++); add('crier', pick(L.houses) ?? null, k++); }
     for (const h of L.houses) {
       if (h.kind === 'hall') continue;
       const n = h.kind === 'tall' || h.kind === 'inn' ? 2 : 1 + (hash01(h.cx, 3101, h.cz, seed) < 0.5 ? 1 : 0);
@@ -270,7 +287,7 @@ export class NpcDirector {
       }
     }
     // Cap the crowd.
-    residents.splice(L.city ? 70 : 24);
+    residents.splice(L.city ? 86 : 24);
     // Ring junctions (city): where the spokes cross the ring street.
     const ring = L.city ? L.streets.length - 1 : -1;
     const junctions: Town['junctions'] = [];
@@ -304,7 +321,9 @@ export class NpcDirector {
         // Spawn: at home if the player is close (they step out), else somewhere on their way.
         const d = Math.hypot(town.site.x - this.player.x, town.site.z - this.player.z);
         let x: number, z: number;
-        if (r.home && d < 60) { x = r.home.doorX + 0.5; z = r.home.doorZ + 0.5; }
+        // The bard is already playing on the square when the player arrives.
+        if (r.role === 'bard' && town.L.stage) { x = town.L.stage.x; z = town.L.stage.z; }
+        else if (r.home && d < 60) { x = r.home.doorX + 0.5; z = r.home.doorZ + 0.5; }
         else {
           const st = pick(town.L.streets);
           const [sx, sz] = pointAlong(st.pts, rand(town.L.plazaR, Math.min(st.len, town.L.radius - 6)));
@@ -505,6 +524,9 @@ export class NpcDirector {
         return true;
       }
       case 'play': return this.play(c, dt, night);
+      case 'perform': return this.perform(c, dt, night);
+      case 'listen': return this.listen(c, dt, night);
+      case 'announce': return this.announce(c, dt, night);
       case 'patrol': {
         if (Math.random() < dt * 0.02 && this.near(c)) this.bubbles.say(c, pick(GUARD));
         this.plan(c, night);
@@ -539,6 +561,15 @@ export class NpcDirector {
       case 'buy': n.t = 11; n.lines = []; break;
       case 'idle': n.t = rand(2, 6); break;
       case 'play': n.t = rand(20, 40); break;
+      case 'perform': n.t = rand(45, 75); n.lines = pick(SONGS).slice(); n.li = -1; n.s = 0; break;
+      case 'listen': n.t = rand(20, 40); break;
+      case 'announce': {
+        n.lines = pick(CRIES).slice();
+        const news = this.news?.();
+        if (news) n.lines[1] = news;
+        n.li = -1; n.s = 0; n.t = 4 + n.lines.length * 3;
+        break;
+      }
     }
   }
 
@@ -566,6 +597,16 @@ export class NpcDirector {
         if (n.stall) { const s = n.stall; this.go(c, s.x + 0.5 - s.fx * 1, s.z + 0.5 - s.fz * 1, 'sell'); return; }
         break;
       case 'kid': { const [x, z] = sq(); this.go(c, x, z, 'play'); return; }
+      case 'bard':
+        if (L.stage) { this.go(c, L.stage.x, L.stage.z, 'perform'); return; }
+        break;
+      case 'crier': {
+        // Square edge or a busy street corner, then shout the news.
+        const st = pick(L.streets);
+        const [x, z] = r < 0.5 ? sq() : pointAlong(st.pts, rand(L.plazaR + 3, Math.min(st.len, 40)));
+        this.go(c, x, z, 'announce');
+        return;
+      }
       case 'farmer':
         if (L.fields.length && r < 0.75) {
           const f = pick(L.fields);
@@ -573,6 +614,14 @@ export class NpcDirector {
           return;
         }
         break;
+    }
+    // Gather round the bard while a song is on.
+    const bard = this.host.allNpcs().find((o) => o.npc?.task === 'perform' && o.npc.town === town);
+    if (bard && r < 0.22 && n.role !== 'merchant') {
+      const s = L.stage!;
+      const a = Math.atan2(s.fz, s.fx) + rand(-0.9, 0.9), d = rand(2.2, 3.6);
+      this.go(c, s.x + Math.cos(a) * d, s.z + Math.sin(a) * d, 'listen');
+      return;
     }
     if (r < 0.4) { const [x, z] = sq(); this.go(c, x, z, 'chat'); return; }
     const shops = town.residents.filter((o) => o.role === 'merchant' && o.stall).map((o) => o.stall!);
@@ -686,6 +735,60 @@ export class NpcDirector {
     if (s) this.face(c, { x: s.x + 0.5 + s.fx * 3, z: s.z + 0.5 + s.fz * 3 }, dt);
     if (Math.random() < dt * 0.05 && this.near(c)) { this.bubbles.say(c, pick(CALLS), 2.8); c.tail = 0.8; }
     if (n.t <= 0) { n.task = 'idle'; n.t = rand(3, 8); n.stall = n.res?.stall ?? null; }
+    return true;
+  }
+
+  /** The bard plays the lute on the square and sings; listeners clap at the end. */
+  private perform(c: Creature, dt: number, night: number): boolean {
+    const n = c.npc!;
+    this.host.idle(c, dt);
+    n.t -= dt;
+    n.s += dt;
+    const s = n.town!.L.stage;
+    if (s) this.face(c, { x: s.x + s.fx * 4, z: s.z + s.fz * 4 }, dt);
+    // Strum: the right arm swings fast, the head bobs to the beat.
+    c.flap += dt * 14; c.flapAmp = 0.45;
+    c.head = Math.sin(n.s * 4.2) * 0.12;
+    const turn = Math.floor(n.s / 4);
+    if (turn !== n.li && n.lines.length) {
+      n.li = turn;
+      if (this.near(c)) this.bubbles.say(c, turn % 3 === 2 ? '♪ ♫ ♪' : n.lines[(turn - Math.floor(turn / 3)) % n.lines.length], 3.4);
+    }
+    if (n.t <= 0) {
+      if (this.near(c)) {
+        for (const o of this.host.allNpcs()) if (o.npc?.task === 'listen' && o.npc.town === n.town && Math.random() < 0.6) this.bubbles.say(o, pick(APPLAUSE), 2.2);
+      }
+      n.task = 'idle'; n.t = rand(8, 15);
+      if (night > 0.55) this.goHome(c);
+    }
+    return true;
+  }
+
+  private listen(c: Creature, dt: number, night: number): boolean {
+    const n = c.npc!;
+    this.host.idle(c, dt);
+    n.t -= dt;
+    const bard = this.host.allNpcs().find((o) => o.npc?.task === 'perform' && o.npc.town === n.town);
+    if (!bard) { this.plan(c, night); return true; }
+    this.face(c, bard, dt);
+    c.head = Math.sin(Date.now() * 0.004 + c.seed) * 0.1; // nodding along
+    if (n.t <= 0) this.plan(c, night);
+    return true;
+  }
+
+  /** The town crier rings a hand bell and calls out the news. */
+  private announce(c: Creature, dt: number, night: number): boolean {
+    const n = c.npc!;
+    this.host.idle(c, dt);
+    n.t -= dt;
+    n.s += dt;
+    const turn = Math.floor(n.s / 3);
+    c.tail = turn === 0 ? 0.9 + Math.sin(n.s * 20) * 0.25 : 0.3; // ding-dong, then a raised hand
+    if (turn !== n.li && turn < n.lines.length) {
+      n.li = turn;
+      if (this.near(c)) this.bubbles.say(c, n.lines[turn], 3);
+    }
+    if (n.t <= 0) this.plan(c, night);
     return true;
   }
 

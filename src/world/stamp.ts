@@ -53,7 +53,7 @@ function villageFor(t: Terrain, site: Site): VillagePlan {
 }
 const isSettlement = (s: Site) => s.kind === SITE_VILLAGE || s.kind === SITE_CITY;
 /** How far a settlement's plan reaches from its centre. */
-const SETTLEMENT_REACH = 90;
+const SETTLEMENT_REACH = 110;
 
 const landmarkCache = new Map<string, LandmarkPlan>();
 function landmarkFor(t: Terrain, lm: Landmark): LandmarkPlan {
