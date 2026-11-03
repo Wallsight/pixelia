@@ -2,7 +2,7 @@
 
 Prosedürel üretilmiş, pastel tonlu voksel bir "yaşayan dünya" yürüyüş oyunu. Oyun yok, görev yok: sadece keşif.
 
-**Oyna:** https://wallsight.github.io/pixelia/
+**Oyna:** https://pixeliaverse.github.io/
 
 - 18 biyom, kaleler, yollar, köyler ve başlangıç noktası olan canlı bir şehir (Külkent)
 - Birbiriyle konuşan, alışveriş yapan, oyun oynayan NPC'ler
