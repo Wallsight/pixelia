@@ -30,6 +30,8 @@ export class PlayerController {
   sensitivity = 0.0022;
   /** Held by the on-screen jump button. */
   touchJump = false;
+  /** Held by the on-screen "down" button while flying. */
+  touchDown = false;
 
   private keys = new Set<string>();
   /** Analog stick input (forward, strafe in -1..1) from touch controls. */
@@ -76,6 +78,7 @@ export class PlayerController {
     this.keys.clear();
     this.setAnalog(0, 0, false);
     this.touchJump = false;
+    this.touchDown = false;
   }
 
   /** Asks for pointer lock; returns false if the API is missing so the caller can fall back. */
@@ -205,7 +208,7 @@ export class PlayerController {
 
     if (this.flying) {
       const speed = sprint ? FLY * 2.5 : FLY;
-      const up = (jump ? 1 : 0) - (k.has('KeyC') || k.has('ControlLeft') ? 1 : 0);
+      const up = (jump ? 1 : 0) - (k.has('KeyC') || k.has('ControlLeft') || (live && this.touchDown) ? 1 : 0);
       v.set(wx * speed, up * speed, wz * speed);
       this.onGround = false;
       if (this.collides(p.x, p.y, p.z)) {

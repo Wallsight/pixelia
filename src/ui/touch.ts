@@ -34,6 +34,8 @@ export class TouchControls {
   private pinchDist = 0;
   onMapPan: ((dx: number, dy: number) => void) | null = null;
   onMapZoom: ((dir: number) => void) | null = null;
+  private jumpBtn!: HTMLButtonElement;
+  private flyBtn!: HTMLButtonElement;
 
   constructor(private player: PlayerController, actions: TouchActions) {
     this.el = document.createElement('div');
@@ -45,13 +47,17 @@ export class TouchControls {
     this.el.appendChild(this.stickBase);
 
     const jump = button('t-jump', 'ZIPLA');
+    const down = button('t-down', 'İN');
     const top = div('t-top');
+    const flyBtn = button('t-btn', 'UÇ');
     const mapBtn = button('t-btn', 'HARİTA');
     const timeBtn = button('t-btn', '»');
     const soundBtn = button('t-btn', '♪');
     const pauseBtn = button('t-btn', 'II');
-    top.append(mapBtn, timeBtn, soundBtn, pauseBtn);
-    this.el.append(jump, top);
+    top.append(flyBtn, mapBtn, timeBtn, soundBtn, pauseBtn);
+    this.el.append(jump, down, top);
+    this.jumpBtn = jump;
+    this.flyBtn = flyBtn;
     document.body.appendChild(this.el);
 
     // off(cancelled) runs on release; a touch the OS cancelled (edge swipe, notification) is not a tap.
@@ -63,6 +69,8 @@ export class TouchControls {
     };
     const tap = (b: HTMLElement, fn: () => void): void => hold(b, () => {}, (cancelled) => { if (!cancelled) fn(); });
     hold(jump, () => { player.touchJump = true; }, () => { player.touchJump = false; });
+    hold(down, () => { player.touchDown = true; }, () => { player.touchDown = false; });
+    tap(flyBtn, () => { player.flying = !player.flying; this.syncFly(); });
     tap(mapBtn, () => actions.map());
     tap(timeBtn, () => actions.time());
     tap(soundBtn, () => actions.sound());
@@ -87,6 +95,16 @@ export class TouchControls {
   show(on: boolean): void {
     this.el.classList.toggle('hidden', !on);
     if (!on) this.reset();
+    else this.syncFly();
+  }
+
+  /** Fly mode turns ZIPLA into "up" and shows the "down" button. */
+  syncFly(): void {
+    const f = this.player.flying;
+    this.el.classList.toggle('flying', f);
+    this.flyBtn.classList.toggle('on', f);
+    this.jumpBtn.textContent = f ? 'YUKARI' : 'ZIPLA';
+    if (!f) this.player.touchDown = false;
   }
 
   reset(): void {
@@ -94,6 +112,7 @@ export class TouchControls {
     this.stickBase.classList.remove('active');
     this.player.setAnalog(0, 0, false);
     this.player.touchJump = false;
+    this.player.touchDown = false;
     this.mapTouches.clear();
     this.pinchDist = 0;
   }
