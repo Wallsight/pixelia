@@ -15,6 +15,7 @@ import { Discovery } from './ui/discovery';
 import { Creatures } from './creatures/creatures';
 import { TowerBeacon } from './render/beacon';
 import { Soundscape } from './audio/soundscape';
+import { IS_TOUCH, TouchControls } from './ui/touch';
 
 // ------------------------------------------------------------ settings
 const params = new URLSearchParams(location.search);
@@ -23,8 +24,12 @@ const intParam = (name: string, fallback: number, lo: number, hi: number): numbe
   if (raw === null || !/^-?\d{1,10}$/.test(raw)) return fallback;
   return Math.min(hi, Math.max(lo, parseInt(raw, 10)));
 };
+/** Browsers without the Pointer Lock API (most phones) can only be played with touch controls. */
+const NO_LOCK = typeof (HTMLElement.prototype as { requestPointerLock?: unknown }).requestPointerLock !== 'function';
+/** Phones and tablets get touch controls and lighter defaults; ?touch forces it on desktop. */
+const TOUCH = IS_TOUCH || NO_LOCK || params.has('touch');
 const SEED = intParam('seed', 20261102, -2147483648, 2147483647) >>> 0;
-const RENDER_DISTANCE = intParam('rd', 12, 4, 24);
+const RENDER_DISTANCE = intParam('rd', TOUCH ? 8 : 12, 4, 24);
 const SHADOWS = intParam('shadows', 1, 0, 1) === 1;
 /** Start hour of the day (0-23). */
 const START_HOUR = intParam('hour', 8, 0, 23);
@@ -32,7 +37,7 @@ const START_HOUR = intParam('hour', 8, 0, 23);
 // ------------------------------------------------------------ renderer
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, TOUCH ? 1 : 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight, false);
 renderer.toneMapping = THREE.NeutralToneMapping; // keeps pastel hues intact
 renderer.toneMappingExposure = 1.0;
@@ -113,28 +118,90 @@ const overlay = document.getElementById('overlay')!;
 const status = document.getElementById('status')!;
 const startBtn = document.getElementById('start') as HTMLButtonElement;
 const debug = document.getElementById('debug')!;
-let showDebug = true;
+let showDebug = !TOUCH;
+debug.classList.toggle('hidden', !showDebug);
 
-startBtn.addEventListener('click', () => { sound.start(); player.requestLock(); });
-document.addEventListener('pointerlockchange', () => {
-  overlay.classList.toggle('hidden', player.locked);
-  if (player.locked) sound.start(); else sound.engine.suspend();
-  if (!player.locked && spawned) {
+/** Shows or hides the pause overlay once the player starts, pauses or resumes. */
+function setActive(active: boolean): void {
+  overlay.classList.toggle('hidden', active);
+  touch?.show(active && touchMode);
+  if (active) sound.start(); else sound.engine.suspend();
+  if (!active && worldMap.open) toggleMap();
+  if (!active && spawned) {
     status.textContent = 'Duraklatıldı';
     startBtn.textContent = 'Devam Et';
   }
+}
+function toggleMap(): void {
+  worldMap.toggle();
+  player.paused = worldMap.open;
+  touch?.reset();
+  document.body.classList.toggle('map-open', worldMap.open);
+}
+function toggleSound(): void {
+  sound.engine.setMuted(!sound.engine.muted);
+  discovery.notice('SES', sound.engine.muted ? 'Kapalı' : 'Açık');
+}
+function toggleTime(): void {
+  daynight.speed = daynight.speed === 1 ? 60 : 1;
+  discovery.notice('ZAMAN', daynight.speed > 1 ? 'Hızlı' : 'Normal');
+}
+
+/** Leaves play without a pointer-lock change (touch pause, app sent to the background). */
+function pauseUnlocked(): void {
+  player.locked = false;
+  player.clearInput();
+  setActive(false);
+}
+
+// Touch devices have no pointer lock: the start button simply activates play.
+const touch = TOUCH
+  ? new TouchControls(player, { map: toggleMap, time: toggleTime, sound: toggleSound, pause: pauseUnlocked })
+  : null;
+/** True while playing with touch controls (false when a touch-capable device starts with a mouse). */
+let touchMode = false;
+if (touch) {
+  touch.onMapPan = (dx, dy) => worldMap.pan(dx, dy);
+  touch.onMapZoom = (dir) => worldMap.zoom(dir);
+  document.body.classList.add('touch');
+  // Pause when the app goes to the background (tab switch, screen off).
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && player.locked && touchMode) pauseUnlocked();
+  });
+}
+
+function requestFullscreen(): void {
+  // Fullscreen hides the browser bars on Android; iOS Safari does not support it for pages.
+  if (document.fullscreenElement) return;
+  const root = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
+  try {
+    const p = root.requestFullscreen ? root.requestFullscreen({ navigationUI: 'hide' }) : root.webkitRequestFullscreen?.();
+    if (p) p.catch(() => {});
+  } catch { /* fullscreen is optional */ }
+}
+
+startBtn.addEventListener('click', (e) => {
+  sound.start();
+  // A mouse click on a touch-capable device (convertible, tablet + mouse) still gets pointer-lock mouse look.
+  const viaMouse = (e as PointerEvent).pointerType === 'mouse';
+  touchMode = !!touch && !(viaMouse && player.canLock);
+  worldMap.setTouch(touchMode);
+  if (!touchMode && player.requestLock()) return;
+  if (touchMode) requestFullscreen();
+  // No pointer lock available: play unlocked (touch controls, or plain mouse movement).
+  touchMode = !!touch;
+  player.locked = true;
+  setActive(true);
 });
+document.addEventListener('pointerlockchange', () => setActive(player.locked));
 window.addEventListener('keydown', (e) => {
   if (e.code === 'F3') { e.preventDefault(); showDebug = !showDebug; debug.classList.toggle('hidden', !showDebug); }
   // T: fast-forward time (1x -> 60x -> 1x) to watch sunsets and nights.
-  if (e.code === 'KeyT' && player.locked) daynight.speed = daynight.speed === 1 ? 60 : 1;
-  if (e.code === 'KeyM' && (player.locked || worldMap.open)) { worldMap.toggle(); player.paused = worldMap.open; }
+  if (e.code === 'KeyT' && player.locked) toggleTime();
+  if (e.code === 'KeyM' && (player.locked || worldMap.open)) toggleMap();
   if (e.code === 'KeyC' && worldMap.open) worldMap.recenter();
   // N: sound on/off, B: music on/off.
-  if (e.code === 'KeyN' && player.locked) {
-    sound.engine.setMuted(!sound.engine.muted);
-    discovery.notice('SES', sound.engine.muted ? 'Kapalı' : 'Açık');
-  }
+  if (e.code === 'KeyN' && player.locked) toggleSound();
   if (e.code === 'KeyB' && player.locked) {
     sound.engine.setMusic(!sound.engine.musicOn);
     discovery.notice('MÜZİK', sound.engine.musicOn ? 'Açık' : 'Kapalı');

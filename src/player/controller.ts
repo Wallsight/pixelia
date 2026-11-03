@@ -28,8 +28,14 @@ export class PlayerController {
   /** True while an overlay (map) owns the mouse and keyboard. */
   paused = false;
   sensitivity = 0.0022;
+  /** Held by the on-screen jump button. */
+  touchJump = false;
 
   private keys = new Set<string>();
+  /** Analog stick input (forward, strafe in -1..1) from touch controls. */
+  private analogFwd = 0;
+  private analogStrafe = 0;
+  private analogSprint = false;
   private bobPhase = 0;
   private bobAmount = 0;
   private stepSmooth = 0;
@@ -52,9 +58,7 @@ export class PlayerController {
       if (!this.locked || this.paused) return;
       // Guard against occasional huge spikes some browsers report on lock.
       if (Math.abs(e.movementX) > 400 || Math.abs(e.movementY) > 400) return;
-      this.yaw -= e.movementX * this.sensitivity;
-      this.pitch -= e.movementY * this.sensitivity;
-      this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
+      this.look(e.movementX * this.sensitivity, e.movementY * this.sensitivity);
     });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.dom;
@@ -62,16 +66,52 @@ export class PlayerController {
     });
   }
 
-  requestLock(): void {
-    const el = this.dom as HTMLElement & { requestPointerLock(o?: { unadjustedMovement?: boolean }): Promise<void> | void };
+  /** True if this browser has the Pointer Lock API at all (phones usually do not). */
+  get canLock(): boolean {
+    return typeof (this.dom as { requestPointerLock?: unknown }).requestPointerLock === 'function';
+  }
+
+  /** Drops held keys and stick input, e.g. when play is paused without a pointer-lock change. */
+  clearInput(): void {
+    this.keys.clear();
+    this.setAnalog(0, 0, false);
+    this.touchJump = false;
+  }
+
+  /** Asks for pointer lock; returns false if the API is missing so the caller can fall back. */
+  requestLock(): boolean {
+    const el = this.dom as HTMLElement & { requestPointerLock?(o?: { unadjustedMovement?: boolean }): Promise<void> | void };
+    if (!this.canLock) return false;
+    const fallback = (): void => {
+      try {
+        const p = el.requestPointerLock!();
+        if (p && typeof (p as Promise<void>).catch === 'function') (p as Promise<void>).catch(() => {});
+      } catch { /* pointer lock unavailable */ }
+    };
     try {
       const p = el.requestPointerLock({ unadjustedMovement: true });
-      if (p && typeof (p as Promise<void>).catch === 'function') {
-        (p as Promise<void>).catch(() => el.requestPointerLock());
-      }
+      if (p && typeof (p as Promise<void>).catch === 'function') (p as Promise<void>).catch(fallback);
     } catch {
-      el.requestPointerLock();
+      fallback();
     }
+    return true;
+  }
+
+  /** Touch joystick input; values are clamped to the unit circle. */
+  setAnalog(fwd: number, strafe: number, sprint: boolean): void {
+    const l = Math.hypot(fwd, strafe);
+    const k = l > 1 ? 1 / l : 1;
+    this.analogFwd = fwd * k;
+    this.analogStrafe = strafe * k;
+    this.analogSprint = sprint;
+  }
+
+  /** Rotates the view by a delta in radians (mouse or touch look). */
+  look(dYaw: number, dPitch: number): void {
+    if (this.paused) return;
+    this.yaw -= dYaw;
+    this.pitch -= dPitch;
+    this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
   }
 
   spawn(x: number, y: number, z: number): void {
@@ -141,16 +181,24 @@ export class PlayerController {
     const p = this.position, v = this.velocity;
     const k = this.paused ? NO_KEYS : this.keys;
 
-    const fwd = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
-    const strafe = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
-    const sprint = k.has('ShiftLeft') || k.has('ShiftRight');
-    const jump = k.has('Space');
+    const live = !this.paused;
+    let fwd = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
+    let strafe = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
+    const sprint = k.has('ShiftLeft') || k.has('ShiftRight') || (live && this.analogSprint);
+    const jump = k.has('Space') || (live && this.touchJump);
+    // Keys give full-speed digital input; the touch stick may ask for less.
+    let mag = 1;
+    if (fwd === 0 && strafe === 0 && live) {
+      fwd = this.analogFwd;
+      strafe = this.analogStrafe;
+      mag = Math.min(1, Math.hypot(fwd, strafe));
+    }
 
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
     let wx = -sin * fwd + cos * strafe;
     let wz = -cos * fwd - sin * strafe;
     const wl = Math.hypot(wx, wz);
-    if (wl > 0) { wx /= wl; wz /= wl; }
+    if (wl > 0) { wx *= mag / wl; wz *= mag / wl; }
 
     const feet = this.world.getBlock(Math.floor(p.x), Math.floor(p.y + 0.4), Math.floor(p.z));
     this.inWater = feet >= 0 && KIND[feet] === KIND_WATER;

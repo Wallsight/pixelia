@@ -2,7 +2,10 @@
 <html lang="tr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#0d0b12" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:5173 ws://localhost:5173; worker-src 'self' blob:; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'" />
     <meta name="referrer" content="no-referrer" />
     <title>Pixelia</title>
@@ -18,7 +21,7 @@
         <h1>PIXELIA</h1>
         <p id="status" class="status">Dünya oluşturuluyor…</p>
         <button id="start" disabled>Keşfe Başla</button>
-        <table class="keys">
+        <table class="keys desktop-only">
           <tr><td>Fare</td><td>Etrafa bak</td></tr>
           <tr><td>W A S D</td><td>Yürü</td></tr>
           <tr><td>Shift</td><td>Koş</td></tr>
@@ -30,6 +33,15 @@
           <tr><td>F3</td><td>Bilgi paneli</td></tr>
           <tr><td>Esc</td><td>Duraklat</td></tr>
         </table>
+        <table class="keys touch-only">
+          <tr><td>Sol başparmak</td><td>Yürü (sonuna kadar itince koş)</td></tr>
+          <tr><td>Sağda sürükle</td><td>Etrafa bak</td></tr>
+          <tr><td>ZIPLA</td><td>Zıpla / yüz</td></tr>
+          <tr><td>HARİTA</td><td>Harita (sürükle, iki parmakla yakınlaş)</td></tr>
+          <tr><td>» / ♪</td><td>Zamanı hızlandır / ses</td></tr>
+          <tr><td>II</td><td>Duraklat</td></tr>
+        </table>
+        <p class="touch-only hint">En iyi deneyim için telefonu yan çevirin.</p>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

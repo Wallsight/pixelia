@@ -23,6 +23,7 @@ export class WorldMap {
   open = false;
   private fog = document.createElement('canvas');
   private fogKey = '';
+  private legend: HTMLDivElement;
 
   constructor(seed: number, private terrain: Terrain, private disc: Discovery) {
     this.el = document.createElement('div');
@@ -30,10 +31,10 @@ export class WorldMap {
     this.el.className = 'hidden';
     this.canvas = document.createElement('canvas');
     this.el.appendChild(this.canvas);
-    const legend = document.createElement('div');
-    legend.className = 'map-legend';
-    legend.textContent = 'Tekerlek: yakınlaş · Fare: kaydır · C: ortala · M: kapat';
-    this.el.appendChild(legend);
+    this.legend = document.createElement('div');
+    this.legend.className = 'map-legend';
+    this.setTouch(false);
+    this.el.appendChild(this.legend);
     document.body.appendChild(this.el);
     this.ctx = this.canvas.getContext('2d')!;
 
@@ -43,15 +44,30 @@ export class WorldMap {
     this.worker.postMessage(init);
 
     window.addEventListener('wheel', (e) => {
-      if (!this.open) return;
-      this.zoomIndex = Math.max(0, Math.min(ZOOMS.length - 1, this.zoomIndex + (e.deltaY > 0 ? 1 : -1)));
+      if (this.open) this.zoom(e.deltaY > 0 ? 1 : -1);
     }, { passive: true });
     document.addEventListener('mousemove', (e) => {
-      if (!this.open) return;
-      const step = ZOOMS[this.zoomIndex];
-      this.panX -= e.movementX * step;
-      this.panZ -= e.movementY * step;
+      if (this.open) this.pan(e.movementX, e.movementY);
     });
+  }
+
+  /** Switches the legend between touch and mouse/keyboard hints. */
+  setTouch(on: boolean): void {
+    this.legend.textContent = on
+      ? 'Sürükle: kaydır · İki parmak: yakınlaş · HARİTA: kapat'
+      : 'Tekerlek: yakınlaş · Fare: kaydır · C: ortala · M: kapat';
+  }
+
+  /** Drags the map by a screen-pixel delta. */
+  pan(dx: number, dy: number): void {
+    const step = ZOOMS[this.zoomIndex];
+    this.panX -= dx * step;
+    this.panZ -= dy * step;
+  }
+
+  /** +1 zooms out, -1 zooms in. */
+  zoom(dir: number): void {
+    this.zoomIndex = Math.max(0, Math.min(ZOOMS.length - 1, this.zoomIndex + dir));
   }
 
   toggle(): void {

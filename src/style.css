@@ -21,12 +21,12 @@ body { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; color: v
 }
 #debug.hidden { display: none; }
 #overlay {
-  position: fixed; inset: 0; display: grid; place-items: center;
+  position: fixed; inset: 0; z-index: 10; display: grid; place-items: center;
   background: radial-gradient(ellipse at center, rgba(10, 8, 18, 0.35), rgba(10, 8, 18, 0.75));
 }
 #overlay.hidden { display: none; }
 .panel {
-  min-width: 340px; padding: 26px 34px 22px; background: var(--panel);
+  min-width: 340px; margin: auto; padding: 26px 34px 22px; background: var(--panel);
   border: 3px solid #000; box-shadow: inset 0 0 0 3px #3b3150, 6px 6px 0 #000; text-align: center;
 }
 h1 {
@@ -73,3 +73,51 @@ button:not(:disabled):hover { background: #5c9d36; }
 #toast .kicker { color: #ffd77a; font-size: 13px; letter-spacing: 3px; }
 #toast .title { color: var(--ink); font-size: 24px; margin-top: 4px; text-shadow: 2px 2px #000; }
 #toast .count { color: #c9bfd8; font-size: 12px; margin-top: 4px; }
+
+/* ---------------------------------------------------------- touch devices */
+html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+#view { touch-action: none; }
+.touch-only { display: none; }
+body.touch .touch-only { display: table; }
+body.touch p.touch-only { display: block; }
+body.touch .desktop-only { display: none; }
+body.touch, body.touch * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.hint { margin: 12px 0 0; font-size: 12px; color: #c9bfd8; }
+#overlay { overflow-y: auto; padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); }
+@media (max-width: 520px), (max-height: 520px) {
+  .panel { min-width: 0; width: min(100%, 420px); padding: 16px 16px 14px; }
+  h1 { font-size: 32px; letter-spacing: 4px; }
+  .keys { font-size: 12px; margin-top: 12px; }
+}
+#map { touch-action: none; }
+body.touch #map { inset: max(54px, calc(env(safe-area-inset-top) + 48px)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
+#touch.hidden { display: none; }
+#touch { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+#touch button { pointer-events: auto; touch-action: none; }
+.stick-base {
+  position: fixed; width: 112px; height: 112px; margin: -56px 0 0 -56px; border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.35); background: rgba(20, 16, 30, 0.28); opacity: 0;
+  transition: opacity 0.15s;
+}
+.stick-base.active { opacity: 1; }
+.stick-knob {
+  position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; border-radius: 50%;
+  background: rgba(244, 236, 216, 0.55); border: 3px solid rgba(0, 0, 0, 0.5);
+}
+.t-jump {
+  position: fixed; right: max(22px, env(safe-area-inset-right)); bottom: max(26px, env(safe-area-inset-bottom));
+  width: 84px; height: 84px; padding: 0; border-radius: 50%; font-size: 13px; letter-spacing: 1px;
+  background: rgba(79, 138, 46, 0.62); box-shadow: none; border: 3px solid rgba(0, 0, 0, 0.6);
+}
+.t-top {
+  position: fixed; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right));
+  display: flex; gap: 6px;
+}
+.t-btn {
+  min-width: 46px; height: 40px; padding: 0 10px; font-size: 14px;
+  background: rgba(20, 16, 30, 0.7); box-shadow: inset 0 0 0 2px #3b3150; border: 2px solid #000;
+}
+#touch button.down { filter: brightness(1.4); }
+body.map-open .t-jump { display: none; }
+body.touch #toast { top: max(56px, calc(env(safe-area-inset-top) + 50px)); max-width: calc(100vw - 24px); padding: 8px 16px 10px; }
+body.touch #toast .title { font-size: 18px; }
