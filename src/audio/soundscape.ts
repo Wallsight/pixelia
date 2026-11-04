@@ -78,6 +78,7 @@ const NIGHT_SOUNDS: Record<string, [number, number, number, (e: AudioEngine, o: 
   wail: [6, 60, 0.6, X.wail], swing: [3, 35, 0.5, X.swing], hit: [3, 40, 0.8, X.thud], clang: [3, 45, 0.6, X.clang],
   twang: [3, 40, 0.6, X.twang], zap: [4, 50, 0.6, X.zap], poof: [4, 45, 0.7, X.poof], gurgle: [3, 35, 0.6, X.gurgle],
   heal: [4, 40, 0.6, (e, o, t) => X.chime(e, o, t, [880, 1175, 1568], 0.08, 0.12)],
+  horn: [25, 450, 1, X.horn], boom: [10, 170, 1, X.gateBoom],
 };
 
 export class Soundscape {

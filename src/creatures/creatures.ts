@@ -202,8 +202,8 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
     this.npcs.bubbles.onSay = (c, text) => this.onSound?.('say', c, text);
     this.nightDir = new NightDirector(terrain, this);
     this.wyrm = new WyrmDirector(terrain, this);
-    this.war = new WarDirector(terrain, this, this.nightDir);
-    this.group.add(this.npcs.group, this.fire.group, this.nightDir.group, this.wyrm.group);
+    this.war = new WarDirector(terrain, this, this.nightDir, env, shadows);
+    this.group.add(this.npcs.group, this.fire.group, this.nightDir.group, this.wyrm.group, this.war.group);
   }
 
   /** Live creatures of one species (read-only; for the soundscape). */
@@ -284,6 +284,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
 
   private solid(x: number, y: number, z: number): number {
     const b = this.world.getBlock(x, y, z);
+    if (b >= 0 && !COLLIDES[b] && this.war.solid(x, y, z)) return 1; // a lowered portcullis
     return b < 0 ? -1 : COLLIDES[b];
   }
 

@@ -22,7 +22,18 @@ export const GARRISON: FighterKind[] = ['soldier', 'bowman', 'captain'];
 export const ALLIES: FighterKind[] = [...HEROES, ...GARRISON];
 
 /** Night sounds the soundscape plays. */
-export type NightSound = 'groan' | 'rattle' | 'growl' | 'hiss' | 'wail' | 'swing' | 'hit' | 'clang' | 'twang' | 'zap' | 'poof' | 'heal' | 'gurgle';
+export type NightSound = 'groan' | 'rattle' | 'growl' | 'hiss' | 'wail' | 'swing' | 'hit' | 'clang' | 'twang' | 'zap' | 'poof' | 'heal' | 'gurgle' | 'horn' | 'boom';
+
+/** A besieger's orders from the war director: where to go and, at a closed gate, what to pound. */
+export interface SiegeOrder {
+  x: number;
+  z: number;
+  /** Point to face once there. */
+  fx: number;
+  fz: number;
+  /** Strike the gate (null: just wait there). */
+  pound: ((c: Creature, dmg: number) => void) | null;
+}
 
 type Death = 'bones' | 'burn' | 'fade' | 'flip' | 'topple' | 'smoke' | 'sink';
 
@@ -45,6 +56,8 @@ export interface Fighter {
   garrison: Post | null;
   slot: number;
   raid: { x: number; z: number; r: number } | null;
+  /** Besieging a castle. */
+  siege: SiegeOrder | null;
   death: Death;
   /** Next idle noise. */
   voice: number;
@@ -226,7 +239,7 @@ export class NightDirector {
     const k = KINDS[kind];
     c.fighter = {
       kind, hero: ALLIES.includes(kind), hp: k.hp, max: k.hp, foe: null, cool: rand(0, 1), t: rand(0, 3), down: 0, flash: 0,
-      stone: false, party: null, garrison: null, slot: 0, raid: null, death: k.death, voice: rand(3, 12),
+      stone: false, party: null, garrison: null, slot: 0, raid: null, siege: null, death: k.death, voice: rand(3, 12),
     };
     if (kind === 'wisp' || kind === 'ghost') { c.y = col[0] + (kind === 'wisp' ? rand(0.8, 2) : 0.3); c.ground = col[0]; }
     return c;
@@ -314,7 +327,9 @@ export class NightDirector {
     if (f.kind === 'deepone' && !f.foe && this.ritual(c, f, dt)) return true;
 
     // Pick a foe now and then: the nearest standing hero, or a guard when raiding.
-    if (f.cool < 0.3 && (!f.foe || f.foe.gone || f.foe.dying > 0 || (f.foe.fighter && f.foe.fighter.down > 0))) f.foe = this.nearestHero(c, f.raid ? 10 : 12);
+    // Besiegers at a closed gate only fight whoever is right in front of them.
+    const reach = f.siege ? (f.siege.pound ? k.reach : 9) : f.raid ? 10 : 12;
+    if (f.cool < 0.3 && (!f.foe || f.foe.gone || f.foe.dying > 0 || (f.foe.fighter && f.foe.fighter.down > 0))) f.foe = this.nearestHero(c, reach);
     if (f.voice <= 0) { f.voice = rand(6, 16); if (k.voice) this.host.sound(k.voice, c); }
     f.voice -= dt;
 
@@ -337,6 +352,18 @@ export class NightDirector {
     } else if (f.raid) {
       tx = f.raid.x + Math.sin(c.seed) * f.raid.r; tz = f.raid.z + Math.cos(c.seed) * f.raid.r;
       if (Math.random() < dt) this.host.alarm(c);
+    } else if (f.siege) {
+      const s = f.siege;
+      tx = s.x; tz = s.z; speed *= 1.3;
+      if (Math.hypot(tx - c.x, tz - c.z) < 0.7) {
+        moving = false;
+        c.yaw += angleTo(c.yaw, Math.atan2(s.fx - c.x, s.fz - c.z)) * Math.min(1, dt * 5);
+        if (s.pound && f.cool <= 0) {
+          f.cool = k.cool * rand(0.9, 1.3);
+          c.flap = 0; c.flapAmp = 1.4; c.tail = 1.8;
+          s.pound(c, k.dmg);
+        }
+      }
     } else {
       // Wander; the hungry ones lumber after animals (which run away).
       const prey = k.chase && f.t < 0 ? this.host.nearestAnimal(c.x, c.z, 13) : null;
@@ -437,7 +464,8 @@ export class NightDirector {
   private nearestHero(c: Creature, r: number): Creature | null {
     let best: Creature | null = null, bd = r;
     for (const k of ALLIES) for (const h of this.host.live(k)) {
-      if (h.dying > 0 || h.fighter!.down > 0) continue;
+      // Someone up on a wall is out of reach.
+      if (h.dying > 0 || h.fighter!.down > 0 || Math.abs(h.y - c.y) > 2.5) continue;
       const d = Math.hypot(h.x - c.x, h.z - c.z);
       if (d < bd) { bd = d; best = h; }
     }
@@ -608,6 +636,9 @@ export class NightDirector {
   hit(target: Creature, dmg: number, from: Creature): void {
     const f = target.fighter;
     if (!f || target.dying > 0 || f.down > 0) return;
+    // Arrows barely bite through a troll's hide.
+    const fk = from.fighter?.kind;
+    if (f.kind === 'troll' && (fk === 'bowman' || fk === 'archer')) dmg *= 0.35;
     f.hp -= dmg;
     f.flash = 0.2;
     // A little knockback.
@@ -791,6 +822,12 @@ export class NightDirector {
     });
     if (party.members.length === 3) this.parties.push(party);
     else for (const c of party.members) c.fighter!.party = null;
+  }
+
+  /** Monsters of one kind can be made sturdier (siege trolls). */
+  toughen(c: Creature, hp: number): void {
+    const f = c.fighter!;
+    f.hp = f.max = hp;
   }
 
   info(): string {

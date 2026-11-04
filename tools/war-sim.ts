@@ -65,6 +65,7 @@ const host: NightHost & WarHost = {
     const step = Math.min(d, speed * dt);
     const nx = c.x + (dx / d) * step, nz = c.z + (dz / d) * step;
     const ny = topAt(nx, nz, c.y);
+    if (war.solid(Math.floor(nx), Math.floor(c.y + 0.5), Math.floor(nz))) return 'blocked';
     if (Math.abs(ny - c.y) > 1.05 && ny > c.y) return 'blocked';
     if (c.y - ny > 3) return 'blocked';
     c.x = nx; c.z = nz; c.y = ny; c.yaw = Math.atan2(dx, dz);
@@ -118,9 +119,9 @@ run(30, 'night');
 for (let i = 0; i < 4; i++) { const [x, z] = castleWorld(L, L.half + 10, i * 1.5 - 2); night.spawn('zombie', x, z); }
 run(10, 'attack 10s');
 run(30, 'attack 40s');
+console.log('siege:', war.devSiege());
+for (let i = 0; i < 16; i++) run(10, `siege ${(i + 1) * 10}s`);
 nightV = 0;
 run(60, 'dawn');
 console.log(`\nlines said: ${said.length} (captain: ${drillSaid} in the day)`);
-console.log(said.slice(0, 60).join('\n'));
-console.log('...');
-console.log(said.slice(-25).join('\n'));
+console.log(said.join('\n'));

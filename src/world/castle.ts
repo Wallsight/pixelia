@@ -88,7 +88,7 @@ export interface CastleLayout {
   braziers: Spot[];
   tents: Spot[];
   keepDoor: Spot;
-  /** Foot and head of the wall stairs. */
+  /** Foot and head of the wall stairs on the +v side (mirrored on -v). */
   stairs: [Spot, Spot];
 }
 
@@ -331,9 +331,11 @@ export function buildCastle(site: Site, seed: number, gate: number): CastlePlan 
     for (const v of [-9, 9]) hang(half + 1, v, wallH, 4);
     for (const s of [-7, 7]) { hang(s, half + 1, wallH, 4); hang(s, -(half + 1), wallH, 4); hang(-(half + 1), s, wallH, 4); }
     hang(L.keepFront + 1, 0, 9, 4);
-    // Stairs up to the wall walk, along the inside of the gate wall.
+    // Stairs up to the wall walk, along the inside of the gate wall on both sides of the gate.
     const [foot] = L.stairs;
-    for (let k = 0; k < wallH; k++) for (let y = 1; y <= k + 1; y++) setUV(foot.u, y, foot.v + k, y === k + 1 ? B.STONE_BRICKS : B.COBBLE);
+    for (const side of [1, -1]) {
+      for (let k = 0; k < wallH; k++) for (let y = 1; y <= k + 1; y++) setUV(foot.u, y, side * (foot.v + k), y === k + 1 ? B.STONE_BRICKS : B.COBBLE);
+    }
     // Braziers: a stone stand with an iron bowl (the fire burns at night).
     for (const b of L.braziers) { setUV(b.u, 1, b.v, B.STONE_BRICKS); setUV(b.u, 2, b.v, B.STEEL); }
     // Training dummies: a post with a straw body.

@@ -107,7 +107,7 @@ creatures.wyrm.onSpeak = (who, text, sec, asleep) => subtitle.show(who, text, se
 creatures.wyrm.onSound = (ev, at, text) => sound.wyrm(ev, at, text);
 creatures.wyrm.context = () => ({ found: legendBoard?.foundCount ?? 0, flying: player.flying });
 // Its body is solid: no walking through it, but you can climb onto its back.
-player.extraSolid = (x, y, z) => creatures.wyrm.solid(x, y, z);
+player.extraSolid = (x, y, z) => creatures.wyrm.solid(x, y, z) || creatures.war.solid(x, y, z);
 const camFwd = new THREE.Vector3(), camUp = new THREE.Vector3();
 
 // ------------------------------------------------------------ spawn
@@ -325,6 +325,7 @@ function frame(): void {
         (window as unknown as Record<string, unknown>).__winfo = () => creatures.wyrm.info();
         (window as unknown as Record<string, unknown>).__war = () => creatures.war.info();
         (window as unknown as Record<string, unknown>).__castle = () => creatures.war.nearestCastle(player.position.x, player.position.z);
+        (window as unknown as Record<string, unknown>).__siege = () => creatures.war.devSiege();
         // Dev: hear the dragon rumour and stand in front of the legends board.
         (window as unknown as Record<string, unknown>).__board = () => {
           const l = terrain.landmarks.lair();

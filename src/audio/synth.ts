@@ -427,6 +427,46 @@ export function thud(e: AudioEngine, out: AudioNode, t: number): number {
   return tone(e, out, t, 'sine', 150, 70, 0.002, 0.35, 0.14);
 }
 
+/** A castle war horn: two long brassy calls with a slow swell and a sag at the end. */
+export function horn(e: AudioEngine, out: AudioNode, t: number): number {
+  let end = t;
+  for (const [s, dur] of [[0, 1.3], [1.6, 2.2]]) {
+    const t0 = t + s, f0 = 98;
+    const f = e.filter('lowpass', 500, 1.2);
+    f.frequency.setValueAtTime(380, t0);
+    f.frequency.linearRampToValueAtTime(1100, t0 + 0.35);
+    f.frequency.linearRampToValueAtTime(700, t0 + dur);
+    const g = e.gain();
+    f.connect(g); g.connect(out);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(0.32, t0 + 0.3);
+    g.gain.setValueAtTime(0.32, t0 + dur - 0.35);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    const vib = e.osc('sine', 5), vg = e.gain(2.2);
+    vib.connect(vg);
+    for (const [m, type] of [[1, 'sawtooth'], [2, 'square'], [1.003, 'sawtooth']] as Array<[number, OscillatorType]>) {
+      const o = e.osc(type, f0 * m);
+      o.frequency.setValueAtTime(f0 * m * 0.94, t0);
+      o.frequency.linearRampToValueAtTime(f0 * m, t0 + 0.25);
+      o.frequency.linearRampToValueAtTime(f0 * m * 0.97, t0 + dur);
+      vg.connect(o.frequency);
+      o.connect(f);
+      o.start(t0); o.stop(t0 + dur + 0.05);
+    }
+    vib.start(t0); vib.stop(t0 + dur + 0.05);
+    end = t0 + dur;
+  }
+  return end;
+}
+
+/** Something heavy striking a wooden gate: a deep boom and a creak of timber. */
+export function gateBoom(e: AudioEngine, out: AudioNode, t: number): number {
+  burst(e, out, t, 'brown', 'lowpass', 260, 0.9, 0.003, 0.9, 0.35);
+  burst(e, out, t + 0.01, 'pink', 'bandpass', 900, 2, 0.002, 0.25, 0.08);
+  const end = tone(e, out, t, 'sine', 70, 38, 0.003, 0.8, 0.5);
+  return Math.max(end, tone(e, out, t + 0.12, 'triangle', rnd(180, 230), rnd(140, 170), 0.05, 0.08, 0.35));
+}
+
 /** Steel on steel (the warrior's armour or shield). */
 export function clang(e: AudioEngine, out: AudioNode, t: number): number {
   let end = t;

@@ -4,7 +4,15 @@
 // captain's shouted orders, archery and dummy practice by day, braziers and
 // torches by night. They fight monsters that come close (using the night
 // director's combat) and ignore the player, like everyone else.
+//
+// Some nights a castle is besieged: the horn sounds, the portcullis drops,
+// bowmen line the gate wall and spearmen lock shields in the gate passage
+// while three waves of monsters march on the gate and pound at it (trolls
+// hardest). If the gate breaks the fight moves inside. Dawn ends it either way;
+// the soldiers talk about it the next day.
 
+import * as THREE from 'three';
+import { BIOME } from '../world/biomes';
 import { SITE_CASTLE, type Site } from '../world/structures';
 import { castleLayout, castleWorld, castleYaw, type CastleLayout, type Spot } from '../world/castle';
 import { gateSide } from '../world/stamp';
@@ -12,8 +20,10 @@ import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
 import { fighterStats, type Fighter, type FighterKind, type NightDirector, type NightSound } from './night';
 import type { FireFx } from '../render/fire';
+import { createPropMaterial, type EnvUniforms } from '../render/materials';
+import { LAYER_PROP_CASTER } from '../render/shadows';
 
-export type Duty = 'gate' | 'watch' | 'patrol' | 'drill' | 'spar' | 'archery' | 'captain' | 'fire';
+export type Duty = 'gate' | 'watch' | 'patrol' | 'drill' | 'spar' | 'archery' | 'captain' | 'fire' | 'shield' | 'rampart';
 
 export interface Post {
   g: Garrison;
@@ -22,11 +32,16 @@ export interface Post {
   /** Index within its duty. */
   i: number;
   spot: Spot;
-  /** Home position and facing in world space. */
+  /** Home position and facing in world space (switches to the siege place during a siege). */
   hx: number; hz: number; hyaw: number;
+  base: [number, number, number];
+  siegeHome: [number, number, number] | null;
+  /** Waypoints from the keep door to the post (up the wall stairs), and progress along them. */
+  route: Array<[number, number]> | null;
+  ri: number;
   /** Wall-walk leg (patrols), world space. */
   leg: [number, number, number, number] | null;
-  shift: 'day' | 'night' | 'always';
+  shift: 'day' | 'night' | 'always' | 'siege';
   c: Creature | null;
   /** Patrol direction, strike counter. */
   dir: number;
@@ -49,6 +64,36 @@ interface Garrison {
   talkT: number;
   shoutT: number;
   fighting: boolean;
+  gate: Gate;
+  siege: Siege | null;
+  /** This night's siege roll, and when it starts. */
+  rolled: boolean;
+  siegeAt: number;
+  /** How the last siege went (for the next day's talk). */
+  last: { broke: boolean; trolls: number } | null;
+}
+
+interface Gate {
+  mesh: THREE.Group | null;
+  /** 0 = raised, 1 = down. */
+  drop: number;
+  want: number;
+  hp: number;
+  broken: boolean;
+  shake: number;
+  solid: boolean;
+  boomT: number;
+}
+
+interface Siege {
+  phase: 'alarm' | 'fight' | 'over';
+  t: number;
+  wave: number;
+  nextWave: number;
+  foes: Creature[];
+  orderT: number;
+  shoutT: number;
+  trolls: number;
 }
 
 export interface WarHost {
@@ -97,6 +142,16 @@ const WATCH_TALK = ['Ufuk temiz.', 'Kimse yok.', 'Uzakta kuşlar...', 'Yol boş.
 const NIGHT_ROUND = ['Gözünüzü dört açın!', 'Uyumak yok!', 'Meşaleler yansın.', 'Her şey yolunda mı?'];
 const BATTLE = ['Düşman! Silah başına!', 'Kapıyı tutun!', 'Mızraklar ileri!', 'Oklar, ateş!'];
 const VICTORY = ['Defolup gittiler.', 'Yerlerinize!', 'Kimse yaralı mı?'];
+const SIEGE_SHOUT = ['Tutun!', 'Kalkanlar kenetlensin!', 'Okçular, kapının önü!', 'Geri adım yok!', 'Bir dalga daha geliyor!'];
+const CHEER = ['Zafer!', 'Hurraa!', 'Kaçın bakalım!', 'Bir gece daha bizim!'];
+const WAVE_SIGHT = ['Yolda meşale yok... gözler var!', 'Geliyorlar!', 'Bir sürü daha!'];
+const AFTER_SIEGE = [
+  ['Dün gece kapıya dayandılar.', 'Okçular hepsini indirdi ama.'],
+  ['Hâlâ boru sesi kulağımda.', 'Benim de. Uyuyamadım.'],
+];
+const AFTER_TROLL = ['Kapının önündeki taş troll...', 'Güneş doğunca taş kesildi. Hâlâ orada duruyor.'];
+const AFTER_BREACH = ['Kapıyı kırdılar, gördün mü?', 'Sabaha kadar yeniden kurduk. Ellerim hâlâ titriyor.'];
+const GATE_HP = 110;
 
 const TROUSERS = ['#3a3a4a', '#4a3a2e', '#2e3440', '#4a4a4a'];
 const HAIR = ['#2a1e16', '#4a3020', '#7a5030', '#1a1a1a', '#9a9a9a'];
@@ -106,8 +161,28 @@ export class WarDirector {
   private scanT = 0;
   private time = 0;
   private px = 0; private pz = 0; private nightV = 0;
+  readonly group = new THREE.Group();
+  private wood: THREE.Material | null = null;
+  private iron: THREE.Material | null = null;
 
-  constructor(private terrain: Terrain, private host: WarHost, private night: NightDirector) {}
+  constructor(private terrain: Terrain, private host: WarHost, private night: NightDirector, env?: EnvUniforms, shadows = false) {
+    if (env) {
+      this.wood = createPropMaterial(env, { color: '#5a3e26', shadows });
+      this.iron = createPropMaterial(env, { color: '#4a4e56', shadows });
+    }
+  }
+
+  /** A lowered, unbroken portcullis blocks its cells (for the player and walkers). */
+  solid(x: number, y: number, z: number): boolean {
+    for (const g of this.garrisons.values()) {
+      if (!g.gate.solid) continue;
+      const L = g.L, dx = x - L.cx, dz = z - L.cz;
+      if (L.gx * dx + L.gz * dz !== L.half) continue;
+      const v = L.px * dx + L.pz * dz;
+      if (v >= -1 && v <= 1 && y > L.floorY && y <= L.floorY + 4) return true;
+    }
+    return false;
+  }
 
   update(dt: number, px: number, pz: number, night: number): void {
     this.time += dt;
@@ -125,7 +200,12 @@ export class WarDirector {
     for (const [id, g] of this.garrisons) {
       const d = Math.hypot(g.site.x - px, g.site.z - pz);
       g.active = g.active ? d < 190 : d < 150;
-      if (d > 400) this.garrisons.delete(id);
+      if (!g.active && g.siege) this.endSiege(g);
+      if (g.gate.mesh) g.gate.mesh.visible = g.active || d < 260;
+      if (d > 400) {
+        if (g.gate.mesh) this.group.remove(g.gate.mesh);
+        this.garrisons.delete(id);
+      }
     }
   }
 
@@ -134,15 +214,23 @@ export class WarDirector {
     const g: Garrison = {
       site, L, posts: [], active: false, night: this.nightV > 0.5,
       drill: { t: 4, step: 0, rest: 0, inspect: null, said: false }, spawnT: 0, talkT: rand(8, 16), shoutT: 0, fighting: false,
+      gate: { mesh: null, drop: 0, want: 0, hp: GATE_HP, broken: false, shake: 0, solid: false, boomT: 0 },
+      siege: null, rolled: false, siegeAt: -1, last: null,
     };
     const add = (duty: Duty, kind: FighterKind, i: number, spot: Spot, shift: Post['shift'], leg: Post['leg'] = null) => {
       const [hx, hz] = castleWorld(L, spot.u, spot.v);
-      g.posts.push({
-        g, duty, kind, i, spot, hx, hz, hyaw: castleYaw(L, spot.fu, spot.fv), leg, shift, c: null,
+      const hyaw = castleYaw(L, spot.fu, spot.fv);
+      const p: Post = {
+        g, duty, kind, i, spot, hx, hz, hyaw, base: [hx, hz, hyaw], siegeHome: null, route: null, ri: 0, leg, shift, c: null,
         dir: 1, t: rand(1, 4), scan: rand(0, 0.5), leaving: false, level: false, lunge: 0, turn: 0, march: 0,
-      });
+      };
+      g.posts.push(p);
+      return p;
     };
-    L.gatePosts.forEach((s, i) => add('gate', 'soldier', i, s, 'always'));
+    const at = (u: number, v: number, fu = 1, fv = 0): [number, number, number] => [...castleWorld(L, u, v), castleYaw(L, fu, fv)];
+    const half = L.half;
+    // In a siege the gate sentries fall back behind the shield wall.
+    L.gatePosts.forEach((s, i) => { add('gate', 'soldier', i, s, 'always').siegeHome = at(half - 3, i ? 1 : -1); });
     L.watch.forEach((s, i) => add('watch', 'bowman', i, s, 'always'));
     L.patrols.forEach(([u0, v0, u1, v1], i) => {
       const [ax, az] = castleWorld(L, u0, v0), [bx, bz] = castleWorld(L, u1, v1);
@@ -151,20 +239,29 @@ export class WarDirector {
       const out = Math.abs(mu) > Math.abs(mv) ? [Math.sign(mu), 0] : [0, Math.sign(mv)];
       add('patrol', 'soldier', i, { u: u0, v: v0, y: L.wallH + 1, fu: out[0], fv: out[1] }, 'always', [ax, az, bx, bz]);
     });
-    add('captain', 'captain', 0, L.captain, 'always');
+    add('captain', 'captain', 0, L.captain, 'always').siegeHome = at(half - 6, 0);
     L.drill.forEach((s, i) => add('drill', 'soldier', i, s, 'day'));
     L.strikers.slice(0, 3).forEach((s, i) => add('spar', 'soldier', i, s, 'day'));
     L.shooters.forEach((s, i) => add('archery', 'bowman', i, s, 'day'));
     // Night: two soldiers warm themselves at the braziers by the gate.
     const inner = L.inner;
-    add('fire', 'soldier', 0, { u: inner - 2.4, v: 3, y: 1, fu: 1, fv: 0 }, 'night');
-    add('fire', 'soldier', 1, { u: inner - 2.4, v: -3, y: 1, fu: 1, fv: 0 }, 'night');
+    add('fire', 'soldier', 0, { u: inner - 2.4, v: 3, y: 1, fu: 1, fv: 0 }, 'night').siegeHome = at(half - 3, 0);
+    add('fire', 'soldier', 1, { u: inner - 2.4, v: -3, y: 1, fu: 1, fv: 0 }, 'night').siegeHome = at(half - 4.5, 0);
+    // Siege: a shield wall in the gate passage, bowmen up the stairs onto the gate wall.
+    for (const v of [-1, 0, 1]) add('shield', 'soldier', v + 1, { u: half - 2, v, y: 1, fu: 1, fv: 0 }, 'siege');
+    const [foot, head] = L.stairs;
+    [8, -8, half - 5, -(half - 5)].forEach((v, i) => {
+      const s = Math.sign(v);
+      const p = add('rampart', 'bowman', i, { u: half - 1, v, y: L.wallH + 1, fu: 1, fv: 0 }, 'siege');
+      p.route = [castleWorld(L, foot.u, s * foot.v), castleWorld(L, foot.u, s * head.v), castleWorld(L, head.u, s * head.v)];
+    });
     return g;
   }
 
   // ------------------------------------------------------------ garrison
 
   private onShift(g: Garrison, p: Post): boolean {
+    if (p.shift === 'siege') return !!g.siege && g.siege.phase !== 'over';
     return p.shift === 'always' || (p.shift === 'night') === g.night;
   }
 
@@ -193,23 +290,251 @@ export class WarDirector {
       }
     }
 
-    // When the last monster falls, someone says so.
+    // When the last monster falls, someone says so (a siege has its own ending).
     const fighting = g.posts.some((p) => p.c && p.c.fighter!.foe);
-    if (g.fighting && !fighting) {
+    if (g.fighting && !fighting && !g.siege) {
       const who = g.posts.find((p) => p.duty === 'captain' && p.c)?.c ?? g.posts.find((p) => p.c)?.c;
       if (who) this.say(who, pick(VICTORY), 2.4, 50);
     }
     g.fighting = fighting;
 
+    this.runSiege(g, dt);
+    this.runGate(g, dt);
     this.runDrill(g, dt);
     this.chatter(g, dt);
     g.shoutT -= dt;
   }
 
+  // ------------------------------------------------------------ siege
+
+  private runSiege(g: Garrison, dt: number): void {
+    // Dawn: whatever is left burns or turns to stone; the gate is mended and raised.
+    if (!g.night) {
+      if (g.siege) this.endSiege(g);
+      g.rolled = false; g.siegeAt = -1;
+      if (g.gate.broken || g.gate.hp < GATE_HP) { g.gate.broken = false; g.gate.hp = GATE_HP; }
+      g.gate.want = 0;
+      return;
+    }
+    // Once a night, maybe.
+    if (!g.rolled && this.nightV > 0.7) {
+      g.rolled = true;
+      g.siegeAt = Math.random() < 0.5 ? this.time + rand(15, 90) : -1;
+    }
+    if (!g.siege && g.siegeAt > 0 && this.time >= g.siegeAt) { g.siegeAt = -1; this.startSiege(g); }
+    const s = g.siege;
+    if (!s) return;
+    s.t -= dt;
+    s.foes = s.foes.filter((c) => !c.gone && c.dying === 0 && !c.fighter!.stone);
+    if (s.phase === 'alarm') {
+      if (s.t < 3) g.gate.want = 1;
+      if (s.t <= 0) { s.phase = 'fight'; s.nextWave = this.time; }
+      return;
+    }
+    if (s.phase === 'over') {
+      if (s.t <= 0) {
+        if (!g.gate.broken) { g.gate.want = 0; const cap = this.captainOf(g); if (cap) this.say(cap, 'Kapıyı açın!', 2.2, 60); }
+        g.siege = null;
+      }
+      return;
+    }
+    // Waves: the next one comes on a timer, sooner when the last is nearly gone.
+    if (s.wave < 3 && s.foes.length <= 1) s.nextWave = Math.min(s.nextWave, this.time + 8);
+    if (s.wave < 3 && this.time >= s.nextWave) {
+      this.spawnWave(g, s.wave++);
+      s.nextWave = this.time + 50;
+    }
+    if (s.wave >= 3 && s.foes.length === 0) {
+      s.phase = 'over'; s.t = 25;
+      g.last = { broke: g.gate.broken, trolls: s.trolls };
+      const who = g.posts.filter((p) => p.c && !p.leaving).map((p) => p.c!);
+      const cap = this.captainOf(g);
+      if (cap) this.say(cap, `Zafer! ${g.L.house!.name} için!`, 3, 80);
+      for (let i = 0; i < Math.min(4, who.length); i++) {
+        const c = pick(who);
+        setTimeout(() => { if (!c.gone) this.say(c, pick(CHEER), 2.2, 60); }, 900 + i * 700);
+      }
+      this.siegeHomes(g, false);
+      return;
+    }
+    // Orders for the besiegers, and the captain's shouts.
+    s.orderT -= dt;
+    if (s.orderT <= 0) { s.orderT = 0.5; this.order(g, s); }
+    s.shoutT -= dt;
+    if (s.shoutT <= 0) {
+      s.shoutT = rand(7, 12);
+      const cap = this.captainOf(g);
+      if (cap && s.foes.length) this.say(cap, pick(SIEGE_SHOUT), 2, 60);
+    }
+  }
+
+  private captainOf(g: Garrison): Creature | null {
+    const c = g.posts.find((p) => p.duty === 'captain')?.c;
+    return c && !c.gone ? c : null;
+  }
+
+  private startSiege(g: Garrison): void {
+    g.siege = { phase: 'alarm', t: 6, wave: 0, nextWave: 0, foes: [], orderT: 0, shoutT: 4, trolls: 0 };
+    this.siegeHomes(g, true);
+    // The horn from the gate tower, then the captain.
+    const hornist = g.posts.find((p) => p.duty === 'watch' && p.c)?.c ?? this.captainOf(g);
+    if (hornist) this.host.sound('horn', hornist);
+    const cap = this.captainOf(g);
+    if (cap) setTimeout(() => { if (!cap.gone) this.say(cap, 'Kuşatma! Herkes yerine! Kapıyı indirin!', 3, 90); }, 1800);
+  }
+
+  private endSiege(g: Garrison): void {
+    if (g.siege) for (const c of g.siege.foes) if (c.fighter) c.fighter.siege = null;
+    g.siege = null;
+    this.siegeHomes(g, false);
+  }
+
+  /** Swap posts between their usual place and their siege place. */
+  private siegeHomes(g: Garrison, siege: boolean): void {
+    for (const p of g.posts) {
+      if (!p.siegeHome) continue;
+      [p.hx, p.hz, p.hyaw] = siege ? p.siegeHome : p.base;
+    }
+  }
+
+  private spawnWave(g: Garrison, wave: number): void {
+    const s = g.siege!, L = g.L;
+    const b = this.terrain.sample(L.cx, L.cz).biome;
+    const woods = b === BIOME.FOREST || b === BIOME.TAIGA || b === BIOME.BIRCH_FOREST;
+    const hot = b === BIOME.ASHLANDS || b === BIOME.BADLANDS;
+    const kinds: FighterKind[] = wave === 0 ? ['zombie', 'zombie', 'skeleton', 'skeleton', 'zombie']
+      : wave === 1 ? ['skeleton', 'zombie', woods ? 'spider' : 'skeleton', woods ? 'spider' : 'zombie', hot ? 'demon' : 'skeleton', 'zombie']
+      : ['troll', Math.random() < 0.5 ? 'troll' : 'skeleton', 'skeleton', 'zombie', hot ? 'demon' : 'skeleton'];
+    // They come up the road the gate faces, out of the dark.
+    const v0 = rand(-6, 6);
+    for (const kind of kinds) {
+      let c: Creature | null = null;
+      for (const dist of [42, 32, 24]) {
+        const [x, z] = castleWorld(L, L.half + dist + rand(-3, 3), v0 + rand(-3, 3));
+        c = this.night.spawn(kind, x, z);
+        if (c) break;
+      }
+      if (!c) continue;
+      if (kind === 'troll') { this.night.toughen(c, 110); s.trolls++; }
+      c.fighter!.siege = { x: c.x, z: c.z, fx: c.x, fz: c.z, pound: null };
+      s.foes.push(c);
+    }
+    const watcher = g.posts.find((p) => p.duty === 'watch' && p.i === 0)?.c;
+    if (watcher) this.say(watcher, wave === 2 && s.trolls ? 'Troll! Trol geliyor!' : pick(WAVE_SIGHT), 2.4, 80);
+  }
+
+  /** Three may pound the closed gate at once; the rest wait their turn. Through a broken gate, on to the keep. */
+  private order(g: Garrison, s: Siege): void {
+    const L = g.L, gate = g.gate;
+    const closed = gate.drop > 0.9 && !gate.broken;
+    const [gx, gz] = castleWorld(L, L.half, 0);
+    const [kx, kz] = castleWorld(L, L.keepDoor.u, L.keepDoor.v);
+    const slots = [-1, 0, 1].map((v) => castleWorld(L, L.half + 1, v));
+    const taken = new Set<number>();
+    // Trolls first at the gate, then whoever is closest.
+    const order = [...s.foes].sort((a, b) => (b.fighter!.kind === 'troll' ? 1 : 0) - (a.fighter!.kind === 'troll' ? 1 : 0)
+      || Math.hypot(a.x - gx, a.z - gz) - Math.hypot(b.x - gx, b.z - gz));
+    for (const c of order) {
+      const f = c.fighter!;
+      if (!f.siege) continue;
+      if (!closed) { f.siege.x = kx; f.siege.z = kz; f.siege.fx = kx; f.siege.fz = kz; f.siege.pound = null; continue; }
+      let slot = -1, bd = 1e9;
+      slots.forEach(([x, z], i) => { const d = Math.hypot(x - c.x, z - c.z); if (!taken.has(i) && d < bd) { bd = d; slot = i; } });
+      if (slot >= 0 && Math.hypot(c.x - gx, c.z - gz) < 30) {
+        taken.add(slot);
+        const [x, z] = slots[slot];
+        f.siege.x = x; f.siege.z = z; f.siege.fx = gx; f.siege.fz = gz;
+        f.siege.pound = (who, dmg) => this.poundGate(g, who, dmg);
+      } else {
+        // Mill about in front of the gate.
+        const a = (c.seed * 7.3) % TAU;
+        const [x, z] = castleWorld(L, L.half + 5 + Math.abs(Math.sin(a)) * 3, Math.cos(a) * 4);
+        f.siege.x = x; f.siege.z = z; f.siege.fx = gx; f.siege.fz = gz; f.siege.pound = null;
+      }
+    }
+  }
+
+  private poundGate(g: Garrison, c: Creature, dmg: number): void {
+    const gate = g.gate, L = g.L;
+    if (gate.broken) return;
+    const troll = c.fighter!.kind === 'troll';
+    gate.hp -= troll ? dmg * 2.5 : dmg;
+    gate.shake = troll ? 0.5 : 0.25;
+    const [x, z] = castleWorld(L, L.half, 0);
+    if (this.time - gate.boomT > 0.3 && Math.hypot(x - this.px, z - this.pz) < 170) {
+      gate.boomT = this.time;
+      this.host.sound('boom', c);
+      for (let n = 0; n < (troll ? 10 : 4); n++) this.host.fire.spark(c.x + (x - c.x) * 0.6, L.floorY + rand(1.5, 3), c.z + (z - c.z) * 0.6, 0.55, 0.38, 0.2, 1, 2.2);
+    }
+    if (gate.hp > 0) return;
+    gate.broken = true;
+    gate.solid = false;
+    this.host.fire.puff(x, L.floorY + 2, z, 24);
+    this.host.sound('boom', c);
+    const cap = this.captainOf(g);
+    if (cap) this.say(cap, 'Kapı düştü! Kalkanlar! Kimse geri çekilmesin!', 3, 90);
+    if (g.siege) this.order(g, g.siege);
+  }
+
+  /** The portcullis: drops and rises, shakes when struck, falls when broken. */
+  private runGate(g: Garrison, dt: number): void {
+    const gate = g.gate, L = g.L;
+    if (!gate.mesh && this.wood) {
+      gate.mesh = this.buildGate();
+      this.group.add(gate.mesh);
+    }
+    gate.drop += Math.sign(gate.want - gate.drop) * Math.min(Math.abs(gate.want - gate.drop), dt / 3);
+    gate.shake = Math.max(0, gate.shake - dt * 1.5);
+    // Solid only once fully down and nobody (player or soldier) stands under it.
+    if (gate.drop > 0.95 && !gate.broken) {
+      if (!gate.solid) {
+        const under = (x: number, z: number) => {
+          const dx = Math.floor(x) - L.cx, dz = Math.floor(z) - L.cz;
+          return L.gx * dx + L.gz * dz === L.half && Math.abs(L.px * dx + L.pz * dz) <= 1;
+        };
+        gate.solid = !under(this.px, this.pz) && !g.posts.some((p) => p.c && under(p.c.x, p.c.z));
+      }
+    } else gate.solid = false;
+    const m = gate.mesh;
+    if (!m) return;
+    const [x, z] = castleWorld(L, L.half, 0);
+    const out = 0.32;
+    m.rotation.set(0, castleYaw(L, 1, 0), 0);
+    if (gate.broken) {
+      // Torn down and lying in the mud outside.
+      m.position.set(x + L.gx * (out + 0.3), L.floorY + 1.15, z + L.gz * (out + 0.3));
+      m.rotation.x = 1.45;
+      return;
+    }
+    const j = gate.shake * 0.12;
+    const wear = 1 - gate.hp / GATE_HP;
+    m.position.set(x + L.gx * out + rand(-j, j), L.floorY + 1 + (1 - gate.drop) * 4.3, z + L.gz * out + rand(-j, j));
+    m.rotation.z = wear * 0.05;
+    m.rotation.x = -wear * 0.06;
+  }
+
+  private buildGate(): THREE.Group {
+    const grp = new THREE.Group();
+    const box = (w: number, h: number, d: number, x: number, y: number, mat: THREE.Material) => {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      b.position.set(x, y, 0);
+      b.layers.enable(LAYER_PROP_CASTER);
+      grp.add(b);
+    };
+    for (const x of [-1.25, -0.62, 0, 0.62, 1.25]) {
+      box(0.17, 4.0, 0.17, x, 2.0, this.wood!);
+      box(0.09, 0.28, 0.09, x, -0.1, this.iron!); // spikes at the foot
+    }
+    for (const y of [0.55, 1.55, 2.55, 3.55]) box(3.0, 0.12, 0.22, 0, y, this.iron!);
+    return grp;
+  }
+
+
   private spawn(g: Garrison, p: Post, dPlayer: number): void {
     const L = g.L;
     // Wall posts and a far-away player: appear in place. Otherwise step out of the keep.
     const inPlace = p.duty === 'watch' || p.duty === 'patrol' || dPlayer > 70;
+    p.ri = inPlace ? p.route?.length ?? 0 : 0;
     const [dx, dz] = castleWorld(L, L.keepDoor.u, L.keepDoor.v);
     const c = this.night.spawn(p.kind, inPlace ? p.hx : dx, inPlace ? p.hz : dz);
     if (!c) return;
@@ -269,7 +594,7 @@ export class WarDirector {
 
   private chatter(g: Garrison, dt: number): void {
     g.talkT -= dt;
-    if (g.talkT > 0) return;
+    if (g.talkT > 0 || g.siege) return;
     g.talkT = rand(22, 40);
     const near = (p: Post) => p.c && !p.leaving && this.near(p.c, 34);
     const pairTalk = (a: Creature, b: Creature, lines: string[]) => lines.forEach((l, i) => setTimeout(() => {
@@ -280,7 +605,9 @@ export class WarDirector {
     const fire = g.posts.filter((p) => p.duty === 'fire' && near(p));
     const watch = g.posts.filter((p) => p.duty === 'watch' && near(p));
     if (fire.length === 2 && Math.random() < 0.6) pairTalk(fire[0].c!, fire[1].c!, pick(FIRE_TALK));
-    else if (gate.length === 2) pairTalk(gate[0].c!, gate[1].c!, pick(g.night ? GATE_TALK : [...GATE_TALK, ...DAY_GATE_TALK]));
+    else if (gate.length === 2 && g.last && !g.night && Math.random() < 0.6) {
+      pairTalk(gate[0].c!, gate[1].c!, g.last.broke ? AFTER_BREACH : g.last.trolls ? pick([AFTER_TROLL, ...AFTER_SIEGE]) : pick(AFTER_SIEGE));
+    } else if (gate.length === 2) pairTalk(gate[0].c!, gate[1].c!, pick(g.night ? GATE_TALK : [...GATE_TALK, ...DAY_GATE_TALK]));
     else if (watch.length) this.say(watch[0].c!, pick(WATCH_TALK), 2.4);
   }
 
@@ -310,11 +637,18 @@ export class WarDirector {
     c.flap += dt * 10;
 
     if (this.fight(c, f, p, dt)) return true;
-    c.tail += ((p.duty === 'drill' && p.level ? 1.45 : p.duty === 'fire' ? 0.55 : 0) - c.tail) * Math.min(1, dt * 6);
+    const braced = p.duty === 'shield' || (!!p.g.siege && (p.duty === 'gate' || p.duty === 'fire'));
+    c.tail += ((p.duty === 'drill' && p.level ? 1.45 : braced ? 0.75 : p.duty === 'fire' ? 0.55 : 0) - c.tail) * Math.min(1, dt * 6);
 
     if (p.leaving) {
       p.t -= dt;
       const L = p.g.L;
+      // Back down the stairs first.
+      if (p.route && p.ri > 0) {
+        const [x, z] = p.route[p.ri - 1];
+        if (this.host.walkToward(c, x, z, 1.4, dt) === 'arrived') p.ri--;
+        return p.t > 0;
+      }
       const [x, z] = castleWorld(L, L.keepDoor.u, L.keepDoor.v);
       return this.host.walkToward(c, x, z, 1.4, dt) !== 'arrived' && p.t > 0;
     }
@@ -341,7 +675,14 @@ export class WarDirector {
         break;
       case 'fire':
         this.face(c, p.hyaw, dt);
-        c.head = 0.2;
+        c.head = p.g.siege ? 0 : 0.2;
+        break;
+      case 'shield':
+        this.face(c, p.hyaw, dt);
+        break;
+      case 'rampart':
+        this.face(c, p.hyaw + Math.sin(this.time * 0.3 + c.seed) * 0.3, dt);
+        this.torch(c, dt);
         break;
       case 'drill': this.drill(c, p, dt); break;
       case 'spar': this.spar(c, p, dt); break;
@@ -378,9 +719,16 @@ export class WarDirector {
       }
       return true;
     }
-    if (d > k.reach) {
+    // In a siege the gate passage is held: spears reach through the bars, nobody chases.
+    const g = p.g, hold = !!g.siege && (p.duty === 'shield' || p.duty === 'gate' || p.duty === 'fire' || p.duty === 'captain');
+    const reach = hold && g.gate.drop > 0.9 && !g.gate.broken ? 3.4 : k.reach;
+    if (d > reach) {
+      const chase = !hold || (g.gate.broken && Math.hypot(foe.x - p.hx, foe.z - p.hz) < 7);
       // Patrols cannot leave the wall walk: they shout and watch.
-      if (p.duty === 'patrol' || this.host.walkToward(c, foe.x, foe.z, 2.4, dt) === 'blocked') this.face(c, Math.atan2(foe.x - c.x, foe.z - c.z), dt);
+      if (p.duty === 'patrol' || !chase || this.host.walkToward(c, foe.x, foe.z, 2.4, dt) === 'blocked') {
+        if (hold && !chase) this.goHome(c, p, dt, 1.6);
+        this.face(c, Math.atan2(foe.x - c.x, foe.z - c.z), dt);
+      }
       return true;
     }
     this.face(c, Math.atan2(foe.x - c.x, foe.z - c.z), dt);
@@ -411,6 +759,12 @@ export class WarDirector {
 
   private captain(c: Creature, p: Post, dt: number): boolean {
     const g = p.g, d = g.drill;
+    // In a siege: behind the shield wall, facing the gate.
+    if (g.siege && g.siege.phase !== 'over') {
+      if (this.goHome(c, p, dt, 2)) this.face(c, p.hyaw, dt);
+      this.torch(c, dt);
+      return true;
+    }
     // By night: rounds between the braziers, the gate and the keep.
     if (g.night) {
       const stops = g.posts.filter((q) => (q.duty === 'fire' || q.duty === 'gate') && q.c);
@@ -502,6 +856,11 @@ export class WarDirector {
 
   /** Walk to the post; true once there. */
   private goHome(c: Creature, p: Post, dt: number, speed: number): boolean {
+    if (p.route && p.ri < p.route.length) {
+      const [x, z] = p.route[p.ri];
+      if (this.host.walkToward(c, x, z, speed, dt) === 'arrived') p.ri++;
+      return false;
+    }
     if (Math.hypot(c.x - p.hx, c.z - p.hz) < 0.6) return true;
     if (p.lunge > 0) return true;
     return this.host.walkToward(c, p.hx, p.hz, speed, dt) === 'arrived';
@@ -530,6 +889,17 @@ export class WarDirector {
 
   // ------------------------------------------------------------ dev
 
+  /** Dev: besiege the active castle now (it must be night). */
+  devSiege(): string {
+    const g = [...this.garrisons.values()].find((x) => x.active);
+    if (!g) return 'no garrison active';
+    if (!g.night) return 'not night (try __hour(22))';
+    if (g.siege) return 'already besieged';
+    g.rolled = true;
+    this.startSiege(g);
+    return `siege at ${g.site.name}`;
+  }
+
   /** Nearest held castle (for the dev teleport). */
   nearestCastle(x: number, z: number): { name: string; house: string; x: number; z: number; gate: number } | null {
     let best: Site | null = null, bd = Infinity;
@@ -549,7 +919,9 @@ export class WarDirector {
       const by: Record<string, number> = {};
       for (const p of on) by[p.duty] = (by[p.duty] ?? 0) + 1;
       const fighting = on.filter((p) => p.c!.fighter!.foe).length;
-      return `${g.site.name} (${g.L.house!.name}) ${g.night ? 'gece' : 'gündüz'} drill=${g.drill.rest > 0 ? 'mola' : g.drill.step} ${JSON.stringify(by)} fighting=${fighting}`;
+      const s = g.siege, gate = g.gate;
+      const siege = s ? ` KUŞATMA ${s.phase} dalga=${s.wave} düşman=${s.foes.length} kapı=${gate.broken ? 'KIRIK' : Math.round(gate.hp)}${gate.solid ? ' kapalı' : ''}` : '';
+      return `${g.site.name} (${g.L.house!.name}) ${g.night ? 'gece' : 'gündüz'} drill=${g.drill.rest > 0 ? 'mola' : g.drill.step} ${JSON.stringify(by)} fighting=${fighting}${siege}`;
     }).join(' | ') || 'no garrison active';
   }
 }
