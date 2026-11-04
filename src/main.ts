@@ -19,6 +19,7 @@ import { LegendBoard } from './render/legend-board';
 import { EldritchDirector } from './render/eldritch';
 import { Subtitle } from './ui/subtitle';
 import { PartyChat } from './ui/partychat';
+import { Compass } from './ui/compass';
 import { villageLayout } from './world/village';
 import { IS_TOUCH, TouchControls } from './ui/touch';
 
@@ -110,6 +111,7 @@ const partyChat = new PartyChat();
 creatures.onPartyChat = (party, who, text) => partyChat.post(party, who, text);
 creatures.onAnnounce = (kicker, title, sub) => discovery.announce(kicker, title, sub);
 worldMap.markers = () => creatures.rare.markers();
+const compass = new Compass();
 creatures.wyrm.onSound = (ev, at, text) => sound.wyrm(ev, at, text);
 creatures.wyrm.context = () => ({ found: legendBoard?.foundCount ?? 0, flying: player.flying });
 // Its body is solid: no walking through it, but you can climb onto its back.
@@ -335,7 +337,7 @@ function frame(): void {
         (window as unknown as Record<string, unknown>).__orcs = () => creatures.orcs.info();
         (window as unknown as Record<string, unknown>).__watch = () => creatures.watch.info();
         (window as unknown as Record<string, unknown>).__raid = () => creatures.watch.devRaid();
-        (window as unknown as Record<string, unknown>).__rare = (near = false, hp = 0) => creatures.rare.devStart(near, hp);
+        (window as unknown as Record<string, unknown>).__rare = (near: boolean | 'duel' = false, hp = 0) => creatures.rare.devStart(near, hp);
         (window as unknown as Record<string, unknown>).__rinfo = () => creatures.rare.info();
         (window as unknown as Record<string, unknown>).__map = () => { toggleMap(); return worldMap.open; };
         (window as unknown as Record<string, unknown>).__orda = (capital = true) => creatures.orcs.nearest(player.position.x, player.position.z, capital);
@@ -417,6 +419,7 @@ function frame(): void {
   shadows?.render(renderer, scene, camera.position, daynight.lightDir, daynight.shadowStrength);
   renderer.render(scene, camera);
   worldMap.draw(player.position.x, player.position.z, player.yaw);
+  compass.update(player.yaw, player.position.x, player.position.z, creatures.rare.markers());
 
   frames++;
   fpsTime += dt;

@@ -57,7 +57,7 @@ button:not(:disabled):hover { background: #5c9d36; }
 /* Discovery toasts */
 #toast {
   position: fixed;
-  top: 9vh;
+  top: max(9vh, 84px);
   left: 50%;
   transform: translateX(-50%);
   pointer-events: none;
@@ -157,3 +157,8 @@ body.touch #subtitle .line { font-size: 14px; }
 #partychat .pc-who { color: #9ae07a; }
 #partychat .pc-text { color: #e8f0ff; }
 body.touch #partychat { bottom: auto; top: max(110px, calc(env(safe-area-inset-top) + 104px)); font-size: 11px; width: min(300px, calc(100vw - 24px)); }
+
+/* Compass strip (rare creatures) */
+#compass { position: fixed; top: 6px; left: 50%; transform: translateX(-50%); width: 420px; height: 74px; pointer-events: none; image-rendering: auto; }
+body.map-open #compass { display: none; }
+body.touch #compass { top: max(44px, calc(env(safe-area-inset-top) + 40px)); width: min(420px, calc(100vw - 24px)); height: auto; }

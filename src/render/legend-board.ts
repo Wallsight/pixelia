@@ -31,10 +31,14 @@ const ENTRIES: Array<[number, string]> = [
   [LM.PHONE_BOX, 'Doctor Who'],
   [LM.SUNKEN_TEMPLE, 'Lovecraft'],
   [LM.DRAGON_LAIR, 'Pixelia efsanesi'],
+  [LM.SWORD_THRONE, 'Game of Thrones'],
+  [LM.ICE_WALL, 'Game of Thrones'],
+  [LM.FACE_TREE, 'Game of Thrones'],
+  [LM.DRAGON_SKULL, 'House of the Dragon'],
   [ORDA, 'Pixelia efsanesi'],
 ];
 
-const W = 360, H = 458;
+const W = 360, H = 544;
 const BOARD_W = 3.2, BOARD_H = BOARD_W * (H / W);
 
 export class LegendBoard {

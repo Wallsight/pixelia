@@ -24,6 +24,8 @@ import { nick } from './banter';
 
 const TAU = Math.PI * 2;
 const DESPAWN = 104;
+/** Ridden war dragons (the dance of dragons). */
+const RIDER_DRAGON = 'riderdragon';
 
 type Habitat = 'ground' | 'air' | 'water' | 'flutter' | 'dragon' | 'npc' | 'monster' | 'hero' | 'wyrm' | 'orc';
 
@@ -54,6 +56,8 @@ const SPECIES: SpeciesDef[] = [
   { name: 'butterfly', model: M.butterfly, max: 16, habitat: 'flutter', biomes: [...GREEN], group: [2, 4], speed: 1.2, scale: [1, 1.3], tints: ['#ffb0c8', '#ffe07a', '#a8d8ff', '#ffffff', '#ff9a5a'], shadow: false, time: 1 },
   { name: 'firefly', model: M.firefly, max: 48, habitat: 'flutter', biomes: [...GREEN, BIOME.TAIGA, BIOME.GLOOM, BIOME.RIVER], group: [6, 12], speed: 0.6, scale: [1.5, 1.8], tints: ['#ffffff'], shadow: false, time: -1 },
   { name: 'dragon', model: M.dragon, max: 3, habitat: 'dragon', biomes: [], group: [1, 1], speed: 16, scale: [0.8, 1.15], tints: ['#ffffff', '#a8c4ff', '#c8f0a8', '#ffd08a'], shadow: true, time: 0 },
+  // Ridden war dragons: only in the sky duels (never spawned on their own).
+  { name: RIDER_DRAGON, model: M.riderDragon, max: 2, habitat: 'dragon', biomes: [], group: [1, 1], speed: 17, scale: [1.05, 1.15], tints: ['#ffffff'], shadow: true, time: 0 },
   // The one great dragon, asleep in its lair (placed by the wyrm director).
   { name: GREAT_DRAGON, model: M.greatDragon, max: 1, habitat: 'wyrm', biomes: [], group: [1, 1], speed: 0, scale: [GREAT_SCALE, GREAT_SCALE], tints: ['#ffffff'], shadow: true, time: 0 },
   // People (spawned by the NPC director, not by biome).
@@ -136,7 +140,7 @@ interface SpeciesRuntime {
 /** Dragons circle and land no closer than this to the city centre. */
 const CITY_AIRSPACE = 185;
 
-const enum S { IDLE, WALK, GRAZE, CIRCLE, DESCEND, PERCH, CLIMB, LEAP, SLEEP, HUNT, BREATHE, FEED, FLEE, RAID, ESCAPE }
+const enum S { IDLE, WALK, GRAZE, CIRCLE, DESCEND, PERCH, CLIMB, LEAP, SLEEP, HUNT, BREATHE, FEED, FLEE, RAID, ESCAPE, DUEL }
 
 /** Things the soundscape wants to hear about. */
 export type SoundEvent = 'roar' | 'kill' | 'say' | 'leap' | 'splash';
@@ -266,7 +270,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
       for (let i = list.length - 1; i >= 0; i--) {
         const c = list[i];
         const h = rt.def.habitat;
-        const far = Math.hypot(c.x - px, c.z - pz) > (h === 'wyrm' ? 340 : h === 'dragon' ? 260 : h === 'npc' ? 240 : h === 'hero' || h === 'orc' ? 200 : h === 'monster' ? (c.fighter?.rare ? 260 : 120) : DESPAWN);
+        const far = Math.hypot(c.x - px, c.z - pz) > (h === 'wyrm' ? 340 : h === 'dragon' ? (rt.def.name === RIDER_DRAGON ? 420 : 260) : h === 'npc' ? 240 : h === 'hero' || h === 'orc' ? 200 : h === 'monster' ? (c.fighter?.rare ? 260 : 120) : DESPAWN);
         const wrongTime = (rt.def.time === -1 && night < 0.3) || (rt.def.time === 1 && night > 0.75);
         const alive = c.dying > 0 ? (c.fighter ? this.nightDir.stepDying(c, dt) : this.stepDying(c, dt))
           : !(far || (wrongTime && Math.random() < dt * 0.2) || !this.step(rt.def, c, dt, night));
@@ -370,7 +374,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
       const idx = (this.spawnCursor + k) % this.species.length;
       const rt = this.species[idx];
       const def = rt.def;
-      if (rt.list.length >= def.max || def.habitat === 'npc' || def.habitat === 'monster' || def.habitat === 'hero' || def.habitat === 'wyrm' || def.habitat === 'orc') continue;
+      if (rt.list.length >= def.max || def.habitat === 'npc' || def.habitat === 'monster' || def.habitat === 'hero' || def.habitat === 'wyrm' || def.habitat === 'orc' || def.name === RIDER_DRAGON) continue;
       if ((def.time === 1 && night > 0.6) || (def.time === -1 && night < 0.5)) continue;
       this.spawnCursor = idx + 1;
       if (def.habitat === 'dragon') { this.spawnDragon(rt, px, pz); return; }
@@ -784,11 +788,43 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
         this.fly(c, c.tx + Math.cos(ang) * r, c.ty + 10 + Math.sin(this.time * 0.7) * 2, c.tz + Math.sin(ang) * r, d > 40 ? def.speed : 7, dt);
       }
       if (c.timer <= 0) this.dragonFlee(c);
+    } else if (c.state === S.DUEL) {
+      // The dance: both riders wheel round the same point, each chasing the other's tail;
+      // now and then one turns in and breathes fire across the other's path.
+      const o = c.prey;
+      const ang = Math.atan2(c.z - c.tz, c.x - c.tx) + 0.45;
+      const r = 30 + Math.sin(this.time * 0.37 + c.intent * 2) * 9;
+      const y = c.ty + 26 + Math.sin(this.time * 0.5 + c.intent * 3) * 7;
+      c.aux -= dt;
+      if (o && !o.gone && c.aux < 1.8 && c.aux > 0) {
+        // Breath: bank towards the other and let fly.
+        this.fly(c, o.x, o.y + 1, o.z, def.speed * 0.8, dt);
+        const m = this.mouth(c);
+        const fx = o.x - m.x, fy = o.y + 3 - m.y, fz = o.z - m.z, fd = Math.hypot(fx, fy, fz) || 1;
+        if (fd < 45) this.fire.breathe(m.x, m.y, m.z, fx / fd, fy / fd, fz / fd, dt, 0.9);
+        if (fd < 30 && Math.random() < dt * 2) o.glow = 1.5;
+      } else {
+        if (c.aux <= 0) {
+          c.aux = rand(5, 9);
+          if (Math.hypot(c.x - this.px, c.z - this.pz) < 160) this.npcs.bubbles.say(c, Math.random() < 0.6 ? 'Dracarys!' : c.intent ? 'Siyahlar için!' : 'Yeşiller için!', 2.4);
+          if (Math.random() < 0.4) this.onSound?.('roar', c);
+        }
+        this.fly(c, c.tx + Math.cos(ang) * r, y, c.tz + Math.sin(ang) * r, def.speed, dt);
+      }
+      c.glow *= Math.max(0, 1 - dt * 2);
+      if (c.timer <= 0) {
+        // The dance ends: one breaks off, wounded; the other roars and follows it away.
+        c.state = S.ESCAPE; c.timer = 16;
+        if (o && o.state === S.DUEL) { o.timer = 4; this.onSound?.('roar', o); }
+      }
     } else if (c.state === S.ESCAPE) {
       // Driven off: away from the tower, climbing hard; then it circles far off.
       const ax = c.x - c.tx, az = c.z - c.tz, l = Math.hypot(ax, az) || 1;
       this.fly(c, c.x + (ax / l) * 60, c.ty + 55, c.z + (az / l) * 60, def.speed * 1.2, dt);
-      if (c.timer <= 0) { c.state = S.CIRCLE; c.timer = rand(40, 70); c.tx = c.x + (ax / l) * 160; c.tz = c.z + (az / l) * 160; }
+      if (c.timer <= 0) {
+        if (def.name === RIDER_DRAGON) return false; // the riders fly home, out of sight
+        c.state = S.CIRCLE; c.timer = rand(40, 70); c.tx = c.x + (ax / l) * 160; c.tz = c.z + (az / l) * 160;
+      }
     } else if (c.state === S.CLIMB) {
       this.fly(c, c.x + Math.sin(c.yaw) * 30, c.ty + 40, c.z + Math.cos(c.yaw) * 30, def.speed * 0.7, dt);
       if (c.timer <= 0) {
@@ -1189,6 +1225,33 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
     c.state = S.ESCAPE; c.timer = 14;
     this.onSound?.('roar', c);
   }
+
+  /**
+   * The dance of dragons: two ridden war dragons, one for each side, sweep in and fight
+   * in the sky over (x, z) for a minute or so. Returns them, or null if they cannot come.
+   */
+  dragonDuel(x: number, y: number, z: number): [Creature, Creature] | null {
+    const rt = this.species.find((s) => s.def.name === RIDER_DRAGON)!;
+    if (rt.list.length) return null;
+    const a = Math.random() * TAU, out: Creature[] = [];
+    for (const side of [0, 1]) {
+      const sx = x + Math.cos(a + side * Math.PI) * 70, sz = z + Math.sin(a + side * Math.PI) * 70;
+      const c = this.make(this.species.indexOf(rt), sx, y + 45, sz, new THREE.Color(side ? '#6a5a66' : '#ffe2a0'), rt.def);
+      c.tint2.set(side ? '#1c1418' : '#2f7a44');
+      c.skin = 0.1;
+      c.state = S.DUEL; c.intent = side; c.tx = x; c.ty = y; c.tz = z; c.aux = rand(4, 8);
+      rt.list.push(c);
+      out.push(c);
+    }
+    const [p, q] = out;
+    p.prey = q; q.prey = p;
+    p.timer = q.timer = rand(60, 80);
+    this.onSound?.('roar', p);
+    return [p, q];
+  }
+
+  /** Are the riders still fighting? */
+  dueling(c: Creature): boolean { return !c.gone && c.state === S.DUEL; }
 
   /** Is this dragon still harrying its tower? */
   raiding(c: Creature): boolean { return !c.gone && c.state === S.RAID; }

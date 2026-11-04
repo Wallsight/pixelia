@@ -764,3 +764,21 @@ export function wolf(): Box[] {
     { s: [0.05, 0.04, 0.02], at: [-0.1, 1.06, 0.835], c: '#f0c040', part: PART.HEAD, pivot: headP },
   ];
 }
+
+/** A war dragon with a rider: silver hair, steel on the chest, a cloak in the side's colour (TINT2). */
+export function riderDragon(): Box[] {
+  const steel = '#8a909a', hair = '#ece6da';
+  return [
+    ...dragon(),
+    { s: [1.0, 0.25, 1.1], at: [0, 4.12, 1.3], c: '#5a3a22', t: SL.FIXED },
+    { s: [0.22, 0.5, 0.6], at: [0.55, 3.95, 1.45], c: '#2e2a30', t: SL.FIXED },
+    { s: [0.22, 0.5, 0.6], at: [-0.55, 3.95, 1.45], c: '#2e2a30', t: SL.FIXED },
+    { s: [0.5, 0.62, 0.32], at: [0, 4.6, 1.38], c: steel, t: SL.FIXED },
+    { s: [0.6, 0.85, 0.08], at: [0, 4.5, 1.14], c: '#ffffff', t: SL.TINT2 },
+    { s: [0.14, 0.42, 0.14], at: [0.3, 4.55, 1.6], c: steel, t: SL.FIXED },
+    { s: [0.14, 0.42, 0.14], at: [-0.3, 4.55, 1.6], c: steel, t: SL.FIXED },
+    { s: [0.36, 0.36, 0.34], at: [0, 5.12, 1.42], c: '#ffffff', t: SL.SKIN },
+    { s: [0.38, 0.14, 0.36], at: [0, 5.34, 1.4], c: hair, t: SL.FIXED },
+    { s: [0.38, 0.46, 0.08], at: [0, 5.04, 1.22], c: hair, t: SL.FIXED },
+  ];
+}

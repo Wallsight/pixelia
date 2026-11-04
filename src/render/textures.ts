@@ -199,6 +199,7 @@ const painters: Record<TileName, (c: Canvas) => void> = {
   gloom_log_top(c) { rings(c, pal('#5a4a5e', '#66556b', '#4e4052'), hex('#2e2634')); },
 
   oak_leaves(c) { leaves(c, pal('#2c5e30', '#346c37', '#3d7a3f', '#478948', '#539753')); },
+  red_leaves(c) { leaves(c, pal('#7a1a1a', '#8e2020', '#a2282a', '#b83434', '#c84a40')); },
   birch_leaves(c) { leaves(c, pal('#4f7a2c', '#5b8833', '#68963b', '#76a444', '#86b24f')); },
   spruce_leaves(c) { leaves(c, pal('#1c3d2a', '#224833', '#28533a', '#2f5e42', '#386a4b'), 0.12); },
   gloom_leaves(c) { leaves(c, pal('#3a3046', '#453852', '#50405e', '#5c466a', '#6b3f62'), 0.18); },
@@ -720,7 +721,7 @@ function mushroom(c: Canvas, cap: RGB[], spots: boolean): void {
 // ---------------------------------------------------------------- pastel grade
 /** Global art direction: softer saturation, lifted lightness, slightly warm. */
 /** Tiles that keep more of their saturation (liquids, glowing things). */
-const SOFT_PASTEL = new Set<string>(['water', 'deep_water', 'lava', 'magma', 'glyph', 'kelp', 'ember_flower', 'gold', 'saber_blade', 'saber_hilt', 'booth_blue', 'door_green', 'window_wood', 'cloth_red', 'cloth_yellow', 'roof_red', 'banner_red', 'banner_blue', 'banner_green', 'banner_black', 'banner_purple', 'war_banner']);
+const SOFT_PASTEL = new Set<string>(['water', 'deep_water', 'lava', 'magma', 'glyph', 'kelp', 'ember_flower', 'gold', 'saber_blade', 'saber_hilt', 'booth_blue', 'door_green', 'window_wood', 'cloth_red', 'cloth_yellow', 'roof_red', 'banner_red', 'banner_blue', 'banner_green', 'banner_black', 'banner_purple', 'war_banner', 'red_leaves']);
 
 export const PASTEL = { saturation: 0.72, lift: 0.2, warmth: 0.02 };
 

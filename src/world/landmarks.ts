@@ -541,6 +541,124 @@ function phoneBox(pb: PlanBuilder): void {
   pb.text(0, 0, 3, 'İçi dışından büyük', 0, 1, 'post');
 }
 
+// ------------------------------------------------------------------ Game of Thrones / House of the Dragon
+
+/** A ruined throne hall: broken columns, a red runner up the dais, a throne grown out of a hundred blades. */
+function swordThrone(pb: PlanBuilder): void {
+  pb.level(11, 13);
+  pb.box(-7, 0, -9, 7, 0, 7, (x, _y, z) => (pb.noise(x, 0, z, 3) < 0.7 ? B.STONE_BRICKS : B.CRACKED_BRICKS));
+  // Columns, some fallen short.
+  for (const z of [-7, -3, 1, 5]) for (const x of [-6, 6]) {
+    const h = 3 + Math.floor(pb.noise(x, 1, z, 4) * 7);
+    for (let y = 1; y <= h; y++) pb.set(x, y, z, pb.noise(x, y, z, 5) < 0.3 ? B.MOSSY_BRICKS : B.STONE_BRICKS);
+  }
+  // The runner and the dais steps.
+  for (let z = -3; z <= 7; z++) pb.set(0, 0, z, B.CLOTH_RED);
+  pb.box(-3, 1, -4, 3, 1, -4, B.STONE_BRICKS);
+  pb.box(-3, 1, -9, 3, 2, -5, B.STONE_BRICKS);
+  // The throne: steel seat and back, blades jutting every way from the back and sides.
+  pb.box(-1, 3, -6, 1, 3, -6, B.STEEL);
+  pb.box(-1, 3, -7, 1, 8, -7, B.STEEL);
+  pb.set(-1, 4, -6, B.STEEL); pb.set(1, 4, -6, B.STEEL);
+  for (let k = 0; k < 40; k++) {
+    const x = Math.round((pb.noise(k, 2, 0, 6) - 0.5) * 7), y = 3 + Math.floor(pb.noise(k, 3, 0, 7) * 9), z = -7 - Math.floor(pb.noise(k, 4, 0, 8) * 2);
+    if (Math.abs(x) <= 1 && y <= 8 && z === -7) continue;
+    if (Math.abs(x) + Math.max(0, y - 8) * 0.8 > 3.6) continue;
+    pb.set(x, y, z, B.STEEL);
+  }
+  pb.set(0, 9, -7, B.STEEL); pb.set(0, 10, -7, B.STEEL); pb.set(-1, 9, -8, B.STEEL); pb.set(1, 9, -8, B.STEEL);
+  pb.text(2, 0, 9, 'Taht oyununda ya kazanırsın ya ölürsün.', 0, 1, 'post', 'Kılıçlardan Taht');
+}
+
+/** A stretch of a great wall of ice with a barred tunnel, a timber stair up its face and a watchmen's hut. */
+function iceWall(pb: PlanBuilder): void {
+  pb.level(20, 24);
+  const H = 22;
+  for (let x = -20; x <= 20; x++) for (let z = -1; z <= 1; z++) {
+    // The top is a little ragged, and the ends are broken off where the wall runs out of this stretch.
+    const end = Math.max(0, Math.abs(x) - 15);
+    const top = H - (pb.noise(x, 0, z, 9) < 0.2 ? 1 : 0) - end * end - Math.floor(pb.noise(x, 1, z, 14) * end * 2);
+    if (top < 1) continue;
+    for (let y = 1; y <= top; y++) pb.set(x, y, z, y === top ? B.SNOW : B.ICE);
+  }
+  // The tunnel and its gate of black bars.
+  pb.box(-1, 1, -1, 1, 3, 1, C_AIR);
+  for (let x = -1; x <= 1; x++) for (let y = 1; y <= 3; y++) if (x !== 0 || y === 3) pb.set(x, y, 2, B.DARK_PLANKS);
+  // Switchback stair on the near face.
+  for (let k = 0; k < H - 1; k++) {
+    const leg = Math.floor(k / 10), along = k % 10;
+    const x = leg % 2 === 0 ? -18 + along : -9 - along, y = k + 1;
+    pb.set(x, y, 2, B.DARK_PLANKS); pb.set(x, y, 3, B.DARK_PLANKS);
+    if (along % 4 === 0) for (let yy = 1; yy < y; yy++) pb.set(x, yy, 3, B.SPRUCE_LOG);
+  }
+  // The watchmen's hut, black banner on its door.
+  pb.box(9, 1, 5, 14, 4, 9, (x, y, z) => (x === 9 || x === 14 || z === 5 || z === 9 ? (y === 4 ? B.SPRUCE_LOG : B.DARK_PLANKS) : C_AIR));
+  pb.box(8, 5, 4, 15, 5, 10, B.SNOW);
+  pb.box(11, 1, 9, 11, 2, 9, C_AIR);
+  pb.set(12, 3, 10, B.BANNER_BLACK);
+  pb.set(10, 1, 11, B.SPRUCE_LOG); pb.set(10, 2, 11, B.LANTERN);
+  pb.text(0, 0, 9, 'Kış geliyor.', 0, 1, 'post', 'Gece Nöbeti: duvarın ötesine geçmeyin');
+}
+
+/** A white tree with a carved, weeping face and a blood-red crown, in a ring of old stones. */
+function faceTree(pb: PlanBuilder): void {
+  pb.level(8, 16);
+  for (let y = 1; y <= 10; y++) pb.box(0, y, 0, 1, y, 1, B.BIRCH_LOG);
+  for (const [x, z] of [[-1, 0], [2, 1], [0, -1], [1, 2]]) pb.set(x, 1, z, B.BIRCH_LOG);
+  // The face (on the near side): dark eyes, red tears, a sad mouth.
+  pb.set(0, 6, 2, B.DARK_PLANKS); pb.set(1, 6, 2, B.DARK_PLANKS);
+  pb.set(0, 5, 2, B.CLOTH_RED); pb.set(1, 4, 2, B.CLOTH_RED);
+  pb.set(0, 3, 2, B.DARK_PLANKS); pb.set(1, 3, 2, B.DARK_PLANKS);
+  // Branches and the crown.
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let s = 1; s <= 3; s++) pb.set(dx > 0 ? 1 + s : dx < 0 ? -s : 0, 9 + Math.floor(s / 2), dz > 0 ? 1 + s : dz < 0 ? -s : 0, B.BIRCH_LOG);
+  // A wide, lumpy, spreading crown (flatter than tall, ragged at the rim).
+  for (let z = -7; z <= 8; z++) for (let x = -7; x <= 8; x++) for (let y = 8; y <= 15; y++) {
+    const d = Math.hypot((x - 0.5) / 6.5, (y - 11.5) / 3.4, (z - 0.5) / 6.5);
+    const lump = (pb.noise(x >> 1, y >> 1, z >> 1, 11) - 0.5) * 0.5;
+    if (d < 1 + lump && pb.noise(x, y, z, 10) < 0.72) pb.set(x, y, z, B.RED_LEAVES);
+  }
+  // A few red leaves fallen round the roots.
+  for (let k = 0; k < 14; k++) {
+    const x = Math.round((pb.noise(k, 5, 0, 12) - 0.5) * 10), z = Math.round((pb.noise(k, 6, 0, 13) - 0.5) * 10);
+    if (Math.abs(x - 0.5) > 1.5 || Math.abs(z - 0.5) > 1.5) pb.set(x, 1, z, B.FLOWER_RED);
+  }
+  // Ring of standing stones.
+  for (let k = 0; k < 10; k++) {
+    const a = (k / 10) * Math.PI * 2;
+    const x = Math.round(0.5 + Math.cos(a) * 6.5), z = Math.round(0.5 + Math.sin(a) * 6.5);
+    if (z > 5 && Math.abs(x) < 2) continue;
+    pb.set(x, 1, z, B.MOSS_STONE);
+    if (k % 2 === 0) pb.set(x, 2, z, B.STONE);
+  }
+  pb.text(-1, 0, 7, 'Eski tanrılar izliyor.', 0, 1, 'post');
+}
+
+/** The skull of a dragon from the old wars, half buried, three eggs in a nest of ash between its jaws. */
+function dragonSkull(pb: PlanBuilder): void {
+  pb.level(14, 12);
+  // Cranium: a bone shell, open eye sockets.
+  for (let z = -10; z <= 1; z++) for (let x = -6; x <= 6; x++) for (let y = 1; y <= 10; y++) {
+    const d = Math.hypot(x / 5.5, (y - 2) / 6.5, (z + 4.5) / 6);
+    if (d > 1) continue;
+    pb.set(x, y, z, d > 0.8 ? B.BONE : C_AIR);
+  }
+  // Eye sockets: open on the sides, black within.
+  for (const s of [-1, 1]) for (let y = 4; y <= 6; y++) for (let z = -3; z <= -1; z++) { pb.set(s * 5, y, z, C_AIR); pb.set(s * 4, y, z, B.OBSIDIAN); }
+  // Long upper jaw and the lower jaw sunk in the ground, teeth between.
+  for (let z = 1; z <= 11; z++) {
+    const w = z < 7 ? 3 : 2;
+    pb.box(-w, 5, z, w, 6, z, z < 10 ? B.BONE : (x) => (Math.abs(x) < w ? B.BONE : C_AIR));
+    pb.box(-w, 1, z, w, 1, z, B.BONE);
+    if (z % 2 === 1) for (const s of [-1, 1]) { pb.set(s * w, 4, z, B.BONE); pb.set(s * w, 2, z, B.BONE); }
+  }
+  // Horns sweeping back.
+  for (const s of [-1, 1]) for (let k = 0; k < 8; k++) pb.set(s * (3 + Math.floor(k / 3)), 8 + Math.floor(k / 2), -6 - k, B.BONE);
+  // Nest of ash with three eggs.
+  pb.box(-1, 2, 4, 1, 2, 6, B.ASH);
+  pb.set(-1, 3, 5, B.OBSIDIAN); pb.set(0, 3, 5, B.GOLD); pb.set(1, 3, 5, B.CLAY_RED);
+  pb.text(5, 0, 13, 'Ateş ve Kan', 0, 1, 'post', 'Ejderhaların Dansı burada bitti');
+}
+
 // ------------------------------------------------------------------ the great dragon's lair
 
 /** Height of the hoard under the great dragon's belly, above the lair floor. */
@@ -637,6 +755,10 @@ const BUILDERS: Record<number, { reach: number; up: number; build: (pb: PlanBuil
   [LM.PHONE_BOX]: { reach: 5, up: 7, build: phoneBox },
   [LM.SUNKEN_TEMPLE]: { reach: 13, up: 36, build: sunkenTemple },
   [LM.DRAGON_LAIR]: { reach: LAIR_R + 1, up: 20, build: dragonLair },
+  [LM.SWORD_THRONE]: { reach: 12, up: 14, build: swordThrone },
+  [LM.ICE_WALL]: { reach: 21, up: 25, build: iceWall },
+  [LM.FACE_TREE]: { reach: 9, up: 17, build: faceTree },
+  [LM.DRAGON_SKULL]: { reach: 15, up: 13, build: dragonSkull },
 };
 
 /** Largest reach of any landmark: how far around a chunk to look for them. */

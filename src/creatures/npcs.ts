@@ -114,6 +114,8 @@ const LM_HINT: Record<number, string> = {
   [LM.MONOLITH]: 'kapkara, kusursuz bir anıt taş', [LM.HOBBIT_HOLE]: 'tepeye oyulmuş yuvarlak kapılı bir ev', [LM.PHONE_BOX]: 'içi dışından büyük mavi bir kulübe',
   [LM.SUNKEN_TEMPLE]: 'kara suların içinde, uyuyan bir şeyin yattığı batık bir tapınak',
   [LM.DRAGON_LAIR]: 'altın yığınının üstünde uyuyan, bir köy büyüklüğünde yaşlı bir ejder',
+  [LM.SWORD_THRONE]: 'yüz kılıçtan dövülmüş bir tahtın durduğu yıkık bir salon', [LM.ICE_WALL]: 'buzdan dev bir duvar; kış oradan gelirmiş',
+  [LM.FACE_TREE]: 'kan kırmızısı yapraklı, gövdesinde ağlayan bir yüz olan beyaz bir ağaç', [LM.DRAGON_SKULL]: 'eski savaşlardan kalma dev bir ejder kafatası',
 };
 
 function direction(dx: number, dz: number): string {

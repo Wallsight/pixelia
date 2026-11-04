@@ -22,7 +22,7 @@ export const TILE_NAMES = [
   'roof_red', 'roof_slate', 'thatch', 'plaster', 'window_wood', 'door_low', 'door_top', 'farmland',
   'wheat', 'carrots', 'hay_top', 'hay_side', 'cloth_red', 'cloth_yellow', 'crate',
   'banner_red', 'banner_blue', 'banner_green', 'banner_black', 'banner_purple',
-  'hide', 'skull', 'war_banner',
+  'hide', 'skull', 'war_banner', 'red_leaves',
 ] as const;
 
 export type TileName = (typeof TILE_NAMES)[number];
@@ -168,6 +168,8 @@ export const B = {
   HIDE: def('hide', KIND_SOLID, 'hide'),
   SKULL: def('skull', KIND_SOLID, 'bone', 'skull', 'bone'),
   WAR_BANNER: def('war_banner', KIND_SOLID, 'war_banner'),
+  // The face tree's blood-red crown.
+  RED_LEAVES: def('red_leaves', KIND_LEAVES, 'red_leaves'),
 } as const;
 for (const b of [B.MAGMA, B.LAVA, B.GLYPH, B.KELP, B.EMBER_FLOWER, B.SABER_BLADE]) EMISSIVE[b] = 1;
 WATERLOGGED[B.KELP] = 1;

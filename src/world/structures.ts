@@ -313,6 +313,10 @@ export const LM = {
   PHONE_BOX: 14, // Doctor Who
   SUNKEN_TEMPLE: 15, // Lovecraft
   DRAGON_LAIR: 16, // Pixelia's own: the great sleeping dragon
+  SWORD_THRONE: 17, // Game of Thrones
+  ICE_WALL: 18, // Game of Thrones
+  FACE_TREE: 19, // Game of Thrones
+  DRAGON_SKULL: 20, // House of the Dragon
 } as const;
 
 /** Where the one great dragon may make its lair (rugged lands first). */
@@ -337,6 +341,10 @@ const LANDMARK_TABLE: Array<{ kind: number; biomes: number[]; weight: number }> 
   { kind: LM.MONOLITH, biomes: [BIOME.DESERT, BIOME.PLAINS, BIOME.TUNDRA], weight: 0.8 },
   { kind: LM.HOBBIT_HOLE, biomes: [...GREEN], weight: 1.2 },
   { kind: LM.PHONE_BOX, biomes: [...GREEN, BIOME.TUNDRA], weight: 0.7 },
+  { kind: LM.SWORD_THRONE, biomes: [...GREEN, BIOME.GLOOM], weight: 1 },
+  { kind: LM.ICE_WALL, biomes: [BIOME.TUNDRA, BIOME.TAIGA], weight: 1.4 },
+  { kind: LM.FACE_TREE, biomes: [BIOME.TAIGA, BIOME.FOREST, BIOME.TUNDRA], weight: 1.2 },
+  { kind: LM.DRAGON_SKULL, biomes: [BIOME.ASHLANDS, BIOME.BADLANDS, BIOME.DESERT], weight: 1.5 },
   // Half drowned in the eldritch shallows (the only landmark allowed in water).
   { kind: LM.SUNKEN_TEMPLE, biomes: [BIOME.ELDRITCH_SEA, BIOME.BLACK_BEACH], weight: 8 },
 ];

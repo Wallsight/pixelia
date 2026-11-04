@@ -17,6 +17,8 @@ import { BATTLE_CALLS, ROAD_BANTER, UP_CALLS, VICTORY_CALLS, exchange } from './
 export interface RareHost extends WarHost {
   partySay(c: Creature, party: string, text: string): void;
   announce(kicker: string, title: string, sub: string): void;
+  dragonDuel(x: number, y: number, z: number): [Creature, Creature] | null;
+  dueling(c: Creature): boolean;
 }
 
 interface RareDef {
@@ -70,6 +72,8 @@ function direction(dx: number, dz: number): string {
 
 export class RareDirector {
   private events: RareEvent[] = [];
+  /** The dance of dragons over (x, z), while the riders fight. */
+  private duels: Array<{ x: number; z: number; a: Creature; b: Creature; t: number }> = [];
   private nextT = rand(120, 240);
   private px = 0; private pz = 0;
 
@@ -77,7 +81,10 @@ export class RareDirector {
 
   /** Map marks: where the beasts are (and whether they are still about). */
   markers(): Array<{ x: number; z: number; label: string; done: boolean }> {
-    return this.events.map((e) => ({ x: e.x, z: e.z, label: e.def.name, done: e.state === 'won' }));
+    return [
+      ...this.events.map((e) => ({ x: e.x, z: e.z, label: e.def.name, done: e.state === 'won' })),
+      ...this.duels.map((d) => ({ x: d.x, z: d.z, label: 'Ejderhaların Dansı', done: false })),
+    ];
   }
 
   update(dt: number, px: number, pz: number): void {
@@ -85,8 +92,12 @@ export class RareDirector {
     this.nextT -= dt;
     if (this.nextT <= 0) {
       this.nextT = rand(360, 660);
-      if (!this.events.some((e) => e.state !== 'won')) this.start();
+      // Now and then the sky event instead: two riders fighting on their dragons.
+      if (Math.random() < 0.3) this.startDuel();
+      else if (!this.events.some((e) => e.state !== 'won')) this.start();
     }
+    for (const d of this.duels) d.t -= dt;
+    this.duels = this.duels.filter((d) => d.t > 0 && (this.host.dueling(d.a) || this.host.dueling(d.b)));
     for (const e of this.events) {
       e.t -= dt;
       const d = Math.hypot(e.x - px, e.z - pz);
@@ -117,6 +128,23 @@ export class RareDirector {
     const d = Math.hypot(e.x - this.px, e.z - this.pz);
     this.host.announce('NADİR YARATIK', `${def.name} göründü!`, `${direction(e.x - this.px, e.z - this.pz)}, ${Math.round(d / 50) * 50} adım ötede · haritada ☠`);
     return true;
+  }
+
+  /** The dance of dragons: in the sky 100-170 steps away (anywhere outside the city). */
+  private startDuel(): boolean {
+    const city = this.terrain.city;
+    for (let tries = 0; tries < 12; tries++) {
+      const a = Math.random() * TAU, r = rand(100, 170);
+      const x = this.px + Math.cos(a) * r, z = this.pz + Math.sin(a) * r;
+      if (city && Math.hypot(x - city.x, z - city.z) < 200) continue;
+      const y = Math.max(SEA, this.terrain.sample(x, z).h);
+      const pair = this.host.dragonDuel(x, y, z);
+      if (!pair) return false;
+      this.duels.push({ x: Math.round(x), z: Math.round(z), a: pair[0], b: pair[1], t: 150 });
+      this.host.announce('EJDERHALARIN DANSI', 'İki ejder süvarisi gökyüzünde çarpışıyor!', `${direction(x - this.px, z - this.pz)}, ${Math.round(r / 10) * 10} adım ötede · Yeşiller ve Siyahlar`);
+      return true;
+    }
+    return false;
   }
 
   /** A place on a road 220-520 steps away, clear of towns, camps and water. */
@@ -342,7 +370,8 @@ export class RareDirector {
   // ------------------------------------------------------------ dev
 
   /** Dev: start a rare-creature event now (optionally right next to the player). */
-  devStart(near = false, hp = 0): string {
+  devStart(near: boolean | 'duel' = false, hp = 0): string {
+    if (near === 'duel') return this.startDuel() ? `duel at ${this.duels[this.duels.length - 1].x},${this.duels[this.duels.length - 1].z}` : 'no duel';
     if (near) {
       const def = pick(DEFS);
       const a = Math.random() * TAU;
@@ -354,6 +383,7 @@ export class RareDirector {
   }
 
   info(): string {
-    return this.events.map((e) => `${e.def.name} ${e.state} @${e.x},${e.z} hp=${e.boss ? Math.round(e.boss.fighter!.hp) : Math.round(e.hp)}/${e.def.hp} parti=${e.party.map((c) => `${c.fighter!.kind}${c.fighter!.down > 0 ? '(yerde)' : ''}`).join(',')} t=${Math.round(e.t)}`).join(' | ') || 'no rare event';
+    const duels = this.duels.map((d) => `dans@${d.x},${d.z} ${[d.a, d.b].map((c) => `${Math.round(c.x)},${Math.round(c.y)},${Math.round(c.z)}`).join(' / ')}`);
+    return [...duels, ...this.events.map((e) => `${e.def.name} ${e.state} @${e.x},${e.z} hp=${e.boss ? Math.round(e.boss.fighter!.hp) : Math.round(e.hp)}/${e.def.hp} parti=${e.party.map((c) => `${c.fighter!.kind}${c.fighter!.down > 0 ? '(yerde)' : ''}`).join(',')} t=${Math.round(e.t)}`)].join(' | ') || 'no rare event';
   }
 }
