@@ -112,6 +112,12 @@ creatures.onPartyChat = (party, who, text) => partyChat.post(party, who, text);
 creatures.onAnnounce = (kicker, title, sub) => discovery.announce(kicker, title, sub);
 worldMap.markers = () => creatures.rare.markers();
 const compass = new Compass();
+// Always on screen (desktop): the map key, clickable too.
+const mapHint = document.createElement('button');
+mapHint.id = 'map-hint';
+mapHint.innerHTML = '<span class="key">M</span> Harita';
+mapHint.addEventListener('click', (e) => { e.stopPropagation(); toggleMap(); });
+document.body.appendChild(mapHint);
 creatures.wyrm.onSound = (ev, at, text) => sound.wyrm(ev, at, text);
 creatures.wyrm.context = () => ({ found: legendBoard?.foundCount ?? 0, flying: player.flying });
 // Its body is solid: no walking through it, but you can climb onto its back.
@@ -419,7 +425,7 @@ function frame(): void {
   shadows?.render(renderer, scene, camera.position, daynight.lightDir, daynight.shadowStrength);
   renderer.render(scene, camera);
   worldMap.draw(player.position.x, player.position.z, player.yaw);
-  compass.update(player.yaw, player.position.x, player.position.z, creatures.rare.markers());
+  compass.update(player.yaw, player.position.x, player.position.z, creatures.rare.markers(), creatures.rare.nextIn);
 
   frames++;
   fpsTime += dt;

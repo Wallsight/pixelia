@@ -3,7 +3,7 @@
 // about, an arrow under the strip points the way to the nearest (it turns as
 // the player turns) with its name and distance.
 
-const W = 420, H = 74, STRIP = 30;
+const W = 420, H = 92, STRIP = 30;
 const LABELS: Array<[number, string]> = [[0, 'K'], [45, 'KD'], [90, 'D'], [135, 'GD'], [180, 'G'], [225, 'GB'], [270, 'B'], [315, 'KB']];
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -25,7 +25,7 @@ export class Compass {
   set visible(v: boolean) { this.canvas.style.display = v ? '' : 'none'; }
 
   /** yaw: the player's (looking along -sin, -cos); +z is south. */
-  update(yaw: number, px: number, pz: number, marks: CompassMark[]): void {
+  update(yaw: number, px: number, pz: number, marks: CompassMark[], next: number): void {
     const g = this.g, d = this.dpr;
     g.setTransform(d, 0, 0, d, 0, 0);
     g.clearRect(0, 0, W, H);
@@ -59,6 +59,17 @@ export class Compass {
     // Centre notch.
     g.fillStyle = '#ffd77a';
     g.beginPath(); g.moveTo(W / 2 - 5, 0); g.lineTo(W / 2 + 5, 0); g.lineTo(W / 2, 6); g.closePath(); g.fill();
+
+    // Countdown to the next rare event: under the strip, or under the arrow while one is about.
+    const live = marks.some((m) => !m.done);
+    const mm = Math.floor(next / 60), ss = Math.floor(next % 60);
+    g.font = 'bold 12px "Cascadia Mono", Consolas, monospace';
+    const cd = `sonraki nadir olay ${mm}:${String(ss).padStart(2, '0')}`;
+    const cdy = live ? H - 8 : STRIP + 12;
+    g.fillStyle = '#000';
+    g.fillText(cd, W / 2 + 1, cdy + 1);
+    g.fillStyle = '#c9bfd8';
+    g.fillText(cd, W / 2, cdy);
 
     // Rare creatures on the strip (pinned to the edge when behind).
     let near: CompassMark | null = null, nd = Infinity;

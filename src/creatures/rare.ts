@@ -39,6 +39,8 @@ const DEFS: RareDef[] = [
   { name: 'Örümcek Ana', kind: 'spider', scale: 2.6, hp: 160, dmg: 6, tint: '#4a3048', glow: 0, roar: ['Sssss...', 'Yavrularım aç...'] },
   { name: 'Soluk Şövalye', kind: 'ghost', scale: 2.0, hp: 160, dmg: 7, glow: 0.8, roar: ['Yeminim bitmedi...', 'Kimse geçemez...'] },
 ];
+/** Seconds between rare events. */
+const RARE_EVERY = 15 * 60;
 const PARTY_NAMES = ['Kayıp Loot', 'Gece Farmcıları', 'AFK Olmayanlar', 'Son Pot', 'Wipe Yok', 'Kritik Vuruş', 'Taze Respawn', 'Altın Kalkan'];
 
 export interface RareEvent {
@@ -74,10 +76,13 @@ export class RareDirector {
   private events: RareEvent[] = [];
   /** The dance of dragons over (x, z), while the riders fight. */
   private duels: Array<{ x: number; z: number; a: Creature; b: Creature; t: number }> = [];
-  private nextT = rand(120, 240);
+  private nextT = RARE_EVERY;
   private px = 0; private pz = 0;
 
   constructor(private terrain: Terrain, private host: RareHost, private night: NightDirector) {}
+
+  /** Seconds until the next rare event. */
+  get nextIn(): number { return Math.max(0, this.nextT); }
 
   /** Map marks: where the beasts are (and whether they are still about). */
   markers(): Array<{ x: number; z: number; label: string; done: boolean }> {
@@ -91,10 +96,12 @@ export class RareDirector {
     this.px = px; this.pz = pz;
     this.nextT -= dt;
     if (this.nextT <= 0) {
-      this.nextT = rand(360, 660);
-      // Now and then the sky event instead: two riders fighting on their dragons.
-      if (Math.random() < 0.3) this.startDuel();
-      else if (!this.events.some((e) => e.state !== 'won')) this.start();
+      this.nextT = RARE_EVERY;
+      // Now and then (or while a beast is still about) the sky event instead: two riders on their dragons.
+      const busy = this.events.some((e) => e.state !== 'won');
+      const ok = busy || Math.random() < 0.3 ? this.startDuel() : this.start();
+      // Nowhere fitting just now (out at sea, say): try again shortly.
+      if (!ok) this.nextT = 30;
     }
     for (const d of this.duels) d.t -= dt;
     this.duels = this.duels.filter((d) => d.t > 0 && (this.host.dueling(d.a) || this.host.dueling(d.b)));
