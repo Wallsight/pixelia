@@ -191,6 +191,11 @@ export class Soundscape {
         : r === 'merchant' ? 150 + k * 50 : k < 0.5 ? 108 + k * 70 : 175 + (k - 0.5) * 120;
       at[1] = c.y + 1.6 * c.scale;
       this.play(at, 'voice', 3, 0.1, 32, 0.9, (o, t) => X.babble(e, o, t, text, f0));
+    } else if (ev === 'say' && c.fighter?.garrison && text) {
+      // Soldiers mutter; the captain's orders carry across the yard.
+      const cap = c.fighter.kind === 'captain', k = (c.seed % 1000) / 1000;
+      at[1] = c.y + 1.6 * c.scale;
+      this.play(at, 'voice', cap ? 6 : 3, 0.1, cap ? 55 : 32, cap ? 1 : 0.9, (o, t) => X.babble(e, o, t, text, cap ? 92 : 100 + k * 40));
     } else if (NIGHT_SOUNDS[ev]) {
       at[1] = c.y + 1.2 * c.scale;
       const [ref, maxD, vol, fn] = NIGHT_SOUNDS[ev];

@@ -16,6 +16,7 @@ import { FireFx } from '../render/fire';
 import { hash01 } from '../engine/noise';
 import { NightDirector, type Fighter, type FighterKind, type NightHost, type NightSound } from './night';
 import { GREAT_DRAGON, GREAT_SCALE, WyrmDirector, type WyrmHost } from './wyrm';
+import { WarDirector, type WarHost } from './war';
 
 const TAU = Math.PI * 2;
 const DESPAWN = 104;
@@ -62,8 +63,10 @@ const SPECIES: SpeciesDef[] = [
     ['troll', M.troll, 4, ['#c8c8b8', '#b8c0a8']], ['wisp', M.wisp, 10, ['#ffffff', '#c8ffd8']],
     ['deepone', M.deepone, 10, ['#5a8a7a', '#4a7a6a', '#6a8a6a', '#5a7a8a']],
     ['warrior', M.warrior, 3, ['#ffffff']], ['archer', M.archer, 3, ['#ffffff']], ['mage', M.mage, 3, ['#ffffff']],
+    // Castle garrisons (spawned by the war director).
+    ['soldier', M.soldier, 24, ['#ffffff']], ['bowman', M.bowman, 10, ['#ffffff']], ['captain', M.captain, 3, ['#ffffff']],
   ] as Array<[FighterKind, () => Box[], number, string[]]>).map(([name, model, max, tints]): SpeciesDef => ({
-    name, model, max, habitat: ['warrior', 'archer', 'mage'].includes(name) ? 'hero' : 'monster', biomes: [], group: [1, 1], speed: 1,
+    name, model, max, habitat: ['warrior', 'archer', 'mage', 'soldier', 'bowman', 'captain'].includes(name) ? 'hero' : 'monster', biomes: [], group: [1, 1], speed: 1,
     scale: name === 'demon' ? [1.15, 1.3] : name === 'spider' ? [0.9, 1.2] : name === 'troll' ? [1, 1.15] : [0.95, 1.05],
     tints, shadow: name !== 'ghost' && name !== 'wisp', time: 0, translucent: name === 'ghost',
   })),
@@ -141,11 +144,12 @@ const angleTo = (from: number, to: number) => {
   return d;
 };
 
-export class Creatures implements NpcHost, NightHost, WyrmHost {
+export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
   readonly group = new THREE.Group();
   readonly npcs: NpcDirector;
   readonly nightDir: NightDirector;
   readonly wyrm: WyrmDirector;
+  readonly war: WarDirector;
   readonly fire = new FireFx();
   private species: SpeciesRuntime[] = [];
   private spawnTimer = 0;
@@ -198,6 +202,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost {
     this.npcs.bubbles.onSay = (c, text) => this.onSound?.('say', c, text);
     this.nightDir = new NightDirector(terrain, this);
     this.wyrm = new WyrmDirector(terrain, this);
+    this.war = new WarDirector(terrain, this, this.nightDir);
     this.group.add(this.npcs.group, this.fire.group, this.nightDir.group, this.wyrm.group);
   }
 
@@ -225,6 +230,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost {
     this.npcCache = null;
     this.npcs.update(dt, px, pz, night, cam);
     this.nightDir.update(dt, px, pz, night);
+    this.war.update(dt, px, pz, night);
     this.wyrm.night = night;
     this.wyrm.update(dt, px, cam.y, pz);
     this.spawnTimer -= dt;
@@ -432,7 +438,8 @@ export class Creatures implements NpcHost, NightHost, WyrmHost {
       case 'flutter': return this.stepFlutter(def, c, dt, night);
       case 'dragon': return this.stepDragon(def, c, dt);
       case 'npc': return this.npcs.step(c, dt, night);
-      case 'monster': case 'hero': return this.nightDir.step(c, dt);
+      case 'monster': return this.nightDir.step(c, dt);
+      case 'hero': return c.fighter?.garrison ? this.war.step(c, dt) : this.nightDir.step(c, dt);
       case 'wyrm': return this.wyrm.step(c, dt);
     }
   }

@@ -434,6 +434,11 @@ const painters: Record<TileName, (c: Canvas) => void> = {
   },
   cloth_red(c) { for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) c.set(x, y, hex(Math.floor(x / 4) % 2 ? '#f2ead8' : '#d8545a')); },
   cloth_yellow(c) { for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) c.set(x, y, hex(Math.floor(x / 4) % 2 ? '#f2ead8' : '#e8b840')); },
+  banner_red(c) { banner(c, '#b8323a'); },
+  banner_blue(c) { banner(c, '#2f5aa8'); },
+  banner_green(c) { banner(c, '#2f7a44'); },
+  banner_black(c) { banner(c, '#2c2832'); },
+  banner_purple(c) { banner(c, '#6a3a8a'); },
   crate(c) {
     planks(c, pal('#9a7848', '#a88452', '#b4905c', '#86663c'));
     for (let i = 0; i < TILE; i++) { c.set(i, 0, hex('#5a4024')); c.set(i, 15, hex('#5a4024')); c.set(0, i, hex('#5a4024')); c.set(15, i, hex('#5a4024')); c.set(i, i, hex('#6a4c2c')); }
@@ -652,6 +657,21 @@ function planks(c: Canvas, p: RGB[]): void {
   }
 }
 
+/** House banner cloth: a woven field, gold side trims and a gold lozenge. */
+function banner(c: Canvas, field: string): void {
+  const f = hex(field);
+  const dark: RGB = [Math.round(f[0] * 0.82), Math.round(f[1] * 0.82), Math.round(f[2] * 0.82)];
+  const gold = hex('#e2b84a'), goldDark = hex('#b8902e');
+  for (let y = 0; y < TILE; y++) {
+    for (let x = 0; x < TILE; x++) {
+      let col = (x + y) % 3 === 0 || c.rng() < 0.12 ? dark : f;
+      if (x <= 1 || x >= 14) col = x === 0 || x === 15 ? goldDark : gold;
+      if (Math.abs(x - 7.5) + Math.abs(y - 7.5) < 4.2) col = Math.abs(x - 7.5) + Math.abs(y - 7.5) < 2 ? f : gold;
+      c.set(x, y, col);
+    }
+  }
+}
+
 function flower(c: Canvas, petals: RGB[], centre: RGB): void {
   c.clear();
   const stem = pal('#2f6a24', '#3a7a2c');
@@ -681,7 +701,7 @@ function mushroom(c: Canvas, cap: RGB[], spots: boolean): void {
 // ---------------------------------------------------------------- pastel grade
 /** Global art direction: softer saturation, lifted lightness, slightly warm. */
 /** Tiles that keep more of their saturation (liquids, glowing things). */
-const SOFT_PASTEL = new Set<string>(['water', 'deep_water', 'lava', 'magma', 'glyph', 'kelp', 'ember_flower', 'gold', 'saber_blade', 'saber_hilt', 'booth_blue', 'door_green', 'window_wood', 'cloth_red', 'cloth_yellow', 'roof_red']);
+const SOFT_PASTEL = new Set<string>(['water', 'deep_water', 'lava', 'magma', 'glyph', 'kelp', 'ember_flower', 'gold', 'saber_blade', 'saber_hilt', 'booth_blue', 'door_green', 'window_wood', 'cloth_red', 'cloth_yellow', 'roof_red', 'banner_red', 'banner_blue', 'banner_green', 'banner_black', 'banner_purple']);
 
 export const PASTEL = { saturation: 0.72, lift: 0.2, warmth: 0.02 };
 

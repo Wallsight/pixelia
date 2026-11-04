@@ -21,6 +21,7 @@ export const TILE_NAMES = [
   'red_bricks', 'gold', 'ember_flower', 'saber_blade', 'saber_hilt', 'door_green', 'booth_blue',
   'roof_red', 'roof_slate', 'thatch', 'plaster', 'window_wood', 'door_low', 'door_top', 'farmland',
   'wheat', 'carrots', 'hay_top', 'hay_side', 'cloth_red', 'cloth_yellow', 'crate',
+  'banner_red', 'banner_blue', 'banner_green', 'banner_black', 'banner_purple',
 ] as const;
 
 export type TileName = (typeof TILE_NAMES)[number];
@@ -156,6 +157,12 @@ export const B = {
   CLOTH_RED: def('cloth_red', KIND_SOLID, 'cloth_red'),
   CLOTH_YELLOW: def('cloth_yellow', KIND_SOLID, 'cloth_yellow'),
   CRATE: def('crate', KIND_SOLID, 'crate'),
+  // Heraldry of the garrisoned castles (one colour per noble house).
+  BANNER_RED: def('banner_red', KIND_SOLID, 'banner_red'),
+  BANNER_BLUE: def('banner_blue', KIND_SOLID, 'banner_blue'),
+  BANNER_GREEN: def('banner_green', KIND_SOLID, 'banner_green'),
+  BANNER_BLACK: def('banner_black', KIND_SOLID, 'banner_black'),
+  BANNER_PURPLE: def('banner_purple', KIND_SOLID, 'banner_purple'),
 } as const;
 for (const b of [B.MAGMA, B.LAVA, B.GLYPH, B.KELP, B.EMBER_FLOWER, B.SABER_BLADE]) EMISSIVE[b] = 1;
 WATERLOGGED[B.KELP] = 1;

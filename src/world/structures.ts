@@ -29,6 +29,8 @@ export interface Site {
   name: string;
   /** Ground height at the site centre. */
   h: number;
+  /** Castles outside the gloom: kept up and garrisoned by a noble house (else a ruin). */
+  held?: boolean;
 }
 
 export interface Road {
@@ -111,6 +113,7 @@ export class StructureMap {
       let kind = castle ? SITE_CASTLE : SITE_CROSSROAD;
       if (!castle && r < 0.62 && VILLAGE_BIOMES.includes(s.biome) && this.flatAround(x, z, 34, 9)) kind = SITE_VILLAGE;
       result = { id, gx, gz, x, z, kind, name: this.makeName(gx, gz, kind), h: s.h };
+      if (castle && !gloomy && hash01(gx, 503, gz, seed) < 0.8) result.held = true;
     }
     this.sites.set(id, result);
     return result;

@@ -7,7 +7,8 @@
 
 import * as THREE from 'three';
 import { hash01 } from '../engine/noise';
-import { LM, SITE_CITY, SITE_VILLAGE, pointAlong, polylineLength, type Site } from '../world/structures';
+import { LM, SITE_CASTLE, SITE_CITY, SITE_VILLAGE, pointAlong, polylineLength, type Site } from '../world/structures';
+import { castleHouse } from '../world/castle';
 import { villageLayout, type House, type Layout, type Spot } from '../world/village';
 import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
@@ -137,6 +138,14 @@ function gossipFor(t: Terrain, site: Site): Gossip[] {
     const d = Math.hypot(t.tower.x - site.x, t.tower.z - site.z);
     const tl = t.landmarks.near(t.tower.x, t.tower.z, t.tower.x, t.tower.z, 1)[0];
     out.push({ text: `Çok uzaklarda, ${direction(t.tower.x - site.x, t.tower.z - site.z)}, ${Math.round(d / 100) * 100} adım ötede kara bir kule yükselirmiş.`, id: tl ? `l:${tl.id}` : null });
+  }
+  // The nearest garrisoned castle and its house.
+  const keep = t.structures.sitesNear(site.x - 900, site.z - 900, site.x + 900, site.z + 900, 0)
+    .filter((s) => s.kind === SITE_CASTLE && s.held)
+    .sort((a, b) => Math.hypot(a.x - site.x, a.z - site.z) - Math.hypot(b.x - site.x, b.z - site.z))[0];
+  if (keep) {
+    const d = Math.hypot(keep.x - site.x, keep.z - site.z);
+    out.push({ text: `${direction(keep.x - site.x, keep.z - site.z)}, ${Math.round(d / 50) * 50} adım ötede ${keep.name} var. ${castleHouse(keep, t.seed).name} askerleri her sabah talim yaparmış.`, id: `s:${keep.id}` });
   }
   // Everyone has heard of the great dragon.
   const lair = t.landmarks.lair();

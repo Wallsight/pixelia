@@ -148,6 +148,12 @@ export class FireFx {
     if (Math.random() < dt * 8 * strength) this.smoke.emit(x + (Math.random() - 0.5) * 0.6, y + 0.4, z + (Math.random() - 0.5) * 0.6, 0, 0.8, 0, 3, 0.35, 0.5);
   }
 
+  /** A hand-held torch: a tight little flame with a wisp of smoke. */
+  torch(x: number, y: number, z: number, dt: number): void {
+    if (Math.random() < dt * 30) this.fire.emit(x + (Math.random() - 0.5) * 0.1, y, z + (Math.random() - 0.5) * 0.1, 0, 1.1, 0, 0.35, 0.13, 0.06);
+    if (Math.random() < dt * 2) this.smoke.emit(x, y + 0.3, z, 0, 0.7, 0, 2, 0.2, 0.35);
+  }
+
   puff(x: number, y: number, z: number, n = 8): void {
     for (let i = 0; i < n; i++) this.smoke.emit(x, y, z, (Math.random() - 0.5) * 2, Math.random() * 1.5, (Math.random() - 0.5) * 2, 1.6, 0.3, 0.7);
   }

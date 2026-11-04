@@ -68,7 +68,7 @@ function landmarkFor(t: Terrain, lm: Landmark): LandmarkPlan {
 }
 
 /** Face the gate towards where the first road arrives from. */
-function gateSide(t: Terrain, site: Site): number {
+export function gateSide(t: Terrain, site: Site): number {
   const road = t.structures.roadsOf(site)[0];
   if (!road) return Math.floor(hash01(site.gx, 900, site.gz, t.seed) * 4);
   const len = polylineLength(road.pts);

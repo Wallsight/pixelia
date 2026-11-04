@@ -10,10 +10,16 @@ import { LM, SITE_CITY, SITE_VILLAGE, pointAlong, polylineLength, type Site } fr
 import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
 import type { FireFx } from '../render/fire';
+import type { Post } from './war';
 
-export type FighterKind = 'skeleton' | 'zombie' | 'demon' | 'spider' | 'ghost' | 'troll' | 'wisp' | 'deepone' | 'warrior' | 'archer' | 'mage';
+export type FighterKind = 'skeleton' | 'zombie' | 'demon' | 'spider' | 'ghost' | 'troll' | 'wisp' | 'deepone' | 'warrior' | 'archer' | 'mage'
+  | 'soldier' | 'bowman' | 'captain';
 export const MONSTERS: FighterKind[] = ['skeleton', 'zombie', 'demon', 'spider', 'ghost', 'troll', 'wisp', 'deepone'];
 export const HEROES: FighterKind[] = ['warrior', 'archer', 'mage'];
+/** Castle garrisons (run by the war director). */
+export const GARRISON: FighterKind[] = ['soldier', 'bowman', 'captain'];
+/** Everyone the monsters go for. */
+export const ALLIES: FighterKind[] = [...HEROES, ...GARRISON];
 
 /** Night sounds the soundscape plays. */
 export type NightSound = 'groan' | 'rattle' | 'growl' | 'hiss' | 'wail' | 'swing' | 'hit' | 'clang' | 'twang' | 'zap' | 'poof' | 'heal' | 'gurgle';
@@ -35,6 +41,8 @@ export interface Fighter {
   /** Trolls turn to stone by day. */
   stone: boolean;
   party: Party | null;
+  /** Castle soldiers: their post in the garrison. */
+  garrison: Post | null;
   slot: number;
   raid: { x: number; z: number; r: number } | null;
   death: Death;
@@ -55,7 +63,8 @@ interface Party {
   talk: number;
 }
 
-interface Shot { kind: 'arrow' | 'bolt' | 'heal'; x: number; y: number; z: number; vx: number; vy: number; vz: number; target: Creature; dmg: number; life: number }
+/** A missile homing on a creature, or (target null) flying at a fixed point (practice shots). */
+interface Shot { kind: 'arrow' | 'bolt' | 'heal'; x: number; y: number; z: number; vx: number; vy: number; vz: number; target: Creature | null; tx: number; ty: number; tz: number; dmg: number; life: number }
 
 export interface NightHost {
   spawnFighter(kind: FighterKind, x: number, z: number): Creature | null;
@@ -98,7 +107,13 @@ const KINDS: Record<FighterKind, KindDef> = {
   warrior: { hp: 30, speed: 1.5, dmg: 3, cool: 0.9, reach: 2.1, death: 'smoke', chase: false, voice: null },
   archer: { hp: 18, speed: 1.5, dmg: 2.5, cool: 1.6, reach: 20, death: 'smoke', chase: false, voice: null },
   mage: { hp: 16, speed: 1.4, dmg: 4, cool: 2.4, reach: 17, death: 'smoke', chase: false, voice: null },
+  soldier: { hp: 26, speed: 1.5, dmg: 3, cool: 1.1, reach: 2.4, death: 'smoke', chase: false, voice: null },
+  bowman: { hp: 18, speed: 1.5, dmg: 2.5, cool: 1.7, reach: 24, death: 'smoke', chase: false, voice: null },
+  captain: { hp: 34, speed: 1.6, dmg: 3.5, cool: 1.0, reach: 2.2, death: 'smoke', chase: false, voice: null },
 };
+
+/** Combat numbers of a fighter kind (for the war director). */
+export const fighterStats = (k: FighterKind): Readonly<KindDef> => KINDS[k];
 
 const SPAWNS: Array<{ kind: FighterKind; biomes: number[]; w: number; group: [number, number] }> = [
   { kind: 'skeleton', biomes: [BIOME.PLAINS, BIOME.TUNDRA, BIOME.DESERT, BIOME.BADLANDS, BIOME.GLOOM, BIOME.ASHLANDS, BIOME.TAIGA], w: 3, group: [1, 3] },
@@ -203,15 +218,15 @@ export class NightDirector {
     for (let i = 0; i < n; i++) this.spawn(o.kind, x + rand(-3, 3), z + rand(-3, 3));
   }
 
-  private spawn(kind: FighterKind, x: number, z: number): Creature | null {
+  spawn(kind: FighterKind, x: number, z: number): Creature | null {
     const col = this.host.columnAt(x, z);
     if (!col || col[1]) return null;
     const c = this.host.spawnFighter(kind, x, z);
     if (!c) return null;
     const k = KINDS[kind];
     c.fighter = {
-      kind, hero: HEROES.includes(kind), hp: k.hp, max: k.hp, foe: null, cool: rand(0, 1), t: rand(0, 3), down: 0, flash: 0,
-      stone: false, party: null, slot: 0, raid: null, death: k.death, voice: rand(3, 12),
+      kind, hero: ALLIES.includes(kind), hp: k.hp, max: k.hp, foe: null, cool: rand(0, 1), t: rand(0, 3), down: 0, flash: 0,
+      stone: false, party: null, garrison: null, slot: 0, raid: null, death: k.death, voice: rand(3, 12),
     };
     if (kind === 'wisp' || kind === 'ghost') { c.y = col[0] + (kind === 'wisp' ? rand(0.8, 2) : 0.3); c.ground = col[0]; }
     return c;
@@ -421,7 +436,7 @@ export class NightDirector {
 
   private nearestHero(c: Creature, r: number): Creature | null {
     let best: Creature | null = null, bd = r;
-    for (const k of HEROES) for (const h of this.host.live(k)) {
+    for (const k of ALLIES) for (const h of this.host.live(k)) {
       if (h.dying > 0 || h.fighter!.down > 0) continue;
       const d = Math.hypot(h.x - c.x, h.z - c.z);
       if (d < bd) { bd = d; best = h; }
@@ -429,7 +444,7 @@ export class NightDirector {
     return best;
   }
 
-  private nearestMonster(x: number, z: number, r: number): Creature | null {
+  nearestMonster(x: number, z: number, r: number): Creature | null {
     let best: Creature | null = null, bd = r;
     for (const m of this.monsters()) {
       if (m.fighter!.kind === 'wisp') continue;
@@ -598,25 +613,25 @@ export class NightDirector {
     // A little knockback.
     const dx = target.x - from.x, dz = target.z - from.z, l = Math.hypot(dx, dz) || 1;
     if (f.kind !== 'troll') { target.x += (dx / l) * 0.25; target.z += (dz / l) * 0.25; }
-    this.host.sound(f.hero && f.kind === 'warrior' ? 'clang' : 'hit', target);
+    this.host.sound(f.hero && (f.kind === 'warrior' || f.kind === 'soldier' || f.kind === 'captain') ? 'clang' : 'hit', target);
     if (f.hp > 0) return;
     if (f.hero) {
       f.down = 7;
-      if (this.near(target)) this.host.say(target, pick(DOWN), 2);
+      if (this.near(target)) this.host.say(target, pick(f.garrison ? ['Ahh!', 'Kalkanım...', 'Yaralandım!'] : DOWN), 2);
       return;
     }
     target.dying = 1e-4;
     this.host.sound('poof', target);
     if (from.fighter?.hero && Math.random() < 0.35 && this.near(from)) this.host.say(from, pick(['Bir tane!', 'Yere!', 'Geri dönme!']), 1.8);
     // Whoever was fighting it looks for the next one.
-    for (const k of HEROES) for (const h of this.host.live(k)) if (h.fighter!.foe === target) h.fighter!.foe = null;
+    for (const k of ALLIES) for (const h of this.host.live(k)) if (h.fighter!.foe === target) h.fighter!.foe = null;
   }
 
-  private cast(from: Creature, target: Creature, kind: Shot['kind'], dmg: number): void {
+  cast(from: Creature, target: Creature, kind: Shot['kind'], dmg: number): void {
     const y0 = from.y + 1.4 * from.scale;
     const dx = target.x - from.x, dy = target.y + 1 - y0, dz = target.z - from.z, l = Math.hypot(dx, dy, dz) || 1;
     const sp = kind === 'arrow' ? 22 : kind === 'bolt' ? 12 : 8;
-    this.shots.push({ kind, x: from.x + (dx / l) * 0.6, y: y0, z: from.z + (dz / l) * 0.6, vx: (dx / l) * sp, vy: (dy / l) * sp + (kind === 'arrow' ? 1.5 : 0), vz: (dz / l) * sp, target, dmg, life: 0 });
+    this.shots.push({ kind, x: from.x + (dx / l) * 0.6, y: y0, z: from.z + (dz / l) * 0.6, vx: (dx / l) * sp, vy: (dy / l) * sp + (kind === 'arrow' ? 1.5 : 0), vz: (dz / l) * sp, target, tx: 0, ty: 0, tz: 0, dmg, life: 0 });
     this.host.sound(kind === 'arrow' ? 'twang' : kind === 'bolt' ? 'zap' : 'heal', from);
     from.fighter!.foe = kind === 'heal' ? from.fighter!.foe : target;
     // Remember who shot it, for the kill line.
@@ -625,6 +640,14 @@ export class NightDirector {
 
   private shooter = new Map<Shot, Creature>();
 
+  /** Practice: an arrow at a fixed point (an archery butt). */
+  shootAt(from: Creature, tx: number, ty: number, tz: number): void {
+    const y0 = from.y + 1.4 * from.scale;
+    const dx = tx - from.x, dy = ty - y0, dz = tz - from.z, l = Math.hypot(dx, dy, dz) || 1;
+    this.shots.push({ kind: 'arrow', x: from.x + (dx / l) * 0.6, y: y0, z: from.z + (dz / l) * 0.6, vx: (dx / l) * 22, vy: (dy / l) * 22 + 1.5, vz: (dz / l) * 22, target: null, tx, ty, tz, dmg: 0, life: 0 });
+    this.host.sound('twang', from);
+  }
+
   private updateShots(dt: number): void {
     const fx = this.host.fire;
     let arrows = 0;
@@ -632,17 +655,23 @@ export class NightDirector {
       const s = this.shots[i];
       s.life += dt;
       const t = s.target;
-      const ty = t.y + (t.fighter?.kind === 'troll' ? 1.6 : t.fighter?.kind === 'wisp' ? 0 : 1);
-      // Homing: steer towards the target's chest.
-      const dx = t.x - s.x, dy = ty - s.y, dz = t.z - s.z, d = Math.hypot(dx, dy, dz) || 1;
+      const ty = t ? t.y + (t.fighter?.kind === 'troll' ? 1.6 : t.fighter?.kind === 'wisp' ? 0 : 1) : s.ty;
+      // Homing: steer towards the target's chest (or the butt).
+      const dx = (t ? t.x : s.tx) - s.x, dy = ty - s.y, dz = (t ? t.z : s.tz) - s.z, d = Math.hypot(dx, dy, dz) || 1;
       const sp = Math.hypot(s.vx, s.vy, s.vz);
       const k = Math.min(1, dt * (s.kind === 'arrow' ? 3 : 5));
       s.vx += ((dx / d) * sp - s.vx) * k; s.vy += ((dy / d) * sp - s.vy) * k; s.vz += ((dz / d) * sp - s.vz) * k;
       s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
       if (s.kind === 'bolt') fx.spark(s.x, s.y, s.z, 0.6, 0.4, 1.0, 3);
       else if (s.kind === 'heal') fx.spark(s.x, s.y, s.z, 0.5, 1.0, 0.5, 2);
-      const done = d < 0.7 || s.life > 3 || t.gone;
-      if (done) {
+      const done = d < 0.7 || s.life > 3 || !!t?.gone;
+      if (done && !t) {
+        // Thunk into the straw.
+        if (d < 0.9) for (let n = 0; n < 5; n++) fx.spark(s.x, s.y, s.z, 0.9, 0.8, 0.45, 1, 1.2);
+        this.shots.splice(i, 1);
+        continue;
+      }
+      if (done && t) {
         if (d < 0.9 && !t.gone) {
           if (s.kind === 'heal') {
             const f = t.fighter!;

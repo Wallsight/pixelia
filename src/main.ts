@@ -323,6 +323,8 @@ function frame(): void {
         (window as unknown as Record<string, unknown>).__einfo = () => eldritch.info();
         (window as unknown as Record<string, unknown>).__wyrm = (what: string) => creatures.wyrm.dev(what);
         (window as unknown as Record<string, unknown>).__winfo = () => creatures.wyrm.info();
+        (window as unknown as Record<string, unknown>).__war = () => creatures.war.info();
+        (window as unknown as Record<string, unknown>).__castle = () => creatures.war.nearestCastle(player.position.x, player.position.z);
         // Dev: hear the dragon rumour and stand in front of the legends board.
         (window as unknown as Record<string, unknown>).__board = () => {
           const l = terrain.landmarks.lair();

@@ -477,6 +477,64 @@ export function mage(): Box[] {
   ];
 }
 
+// ------------------------------------------------------------------ castle garrison
+// TINT is the house colour (tabard, shield, plume), TINT2 the hose.
+
+const STEEL = '#a8b0bc', MAIL = '#8a909a', TRIM = '#e2b84a';
+const garrisonArm = (x: number): V3 => [x, 1.32, 0];
+
+/** Spearman: nasal helm, mail sleeves, a tabard, a long spear and a kite shield. */
+export function soldier(): Box[] {
+  return [
+    ...body({ hair: false }),
+    { s: [0.44, 0.24, 0.42], at: [0, 1.8, 0], c: STEEL, t: SL.FIXED, part: PART.HEAD, pivot: headPivot },
+    { s: [0.05, 0.17, 0.04], at: [0, 1.62, 0.215], c: STEEL, t: SL.FIXED, part: PART.HEAD, pivot: headPivot },
+    { s: [0.17, 0.26, 0.19], at: [0.33, 1.22, 0], c: MAIL, t: SL.FIXED, part: PART.ARM_R, pivot: garrisonArm(0.33) },
+    { s: [0.17, 0.26, 0.19], at: [-0.33, 1.22, 0], c: MAIL, t: SL.FIXED, part: PART.ARM_L, pivot: garrisonArm(-0.33) },
+    { s: [0.53, 0.06, 0.29], at: [0, 1.34, 0], c: TRIM, t: SL.FIXED },
+    { s: [0.5, 0.2, 0.28], at: [0, 0.66, 0], c: '#ffffff', t: SL.TINT }, // tabard skirt
+    // Spear (upright at rest; level when the arms come forward) and kite shield.
+    { s: [0.05, 2.3, 0.05], at: [0.42, 1.15, 0.1], c: '#6a4a2a', t: SL.FIXED, part: PART.ARM_R, pivot: garrisonArm(0.33) },
+    { s: [0.08, 0.26, 0.08], at: [0.42, 2.42, 0.1], c: STEEL, t: SL.FIXED, part: PART.ARM_R, pivot: garrisonArm(0.33) },
+    { s: [0.08, 0.64, 0.46], at: [-0.46, 0.98, 0.07], c: '#ffffff', t: SL.TINT, part: PART.ARM_L, pivot: garrisonArm(-0.33) },
+    { s: [0.09, 0.52, 0.07], at: [-0.47, 0.98, 0.07], c: TRIM, t: SL.FIXED, part: PART.ARM_L, pivot: garrisonArm(-0.33) },
+    { s: [0.09, 0.07, 0.36], at: [-0.47, 1.08, 0.07], c: TRIM, t: SL.FIXED, part: PART.ARM_L, pivot: garrisonArm(-0.33) },
+  ];
+}
+
+/** Castle bowman: kettle hat, padded coat in the house colour, quiver and longbow. */
+export function bowman(): Box[] {
+  return [
+    ...body({ hair: false }),
+    { s: [0.62, 0.05, 0.62], at: [0, 1.8, 0], c: STEEL, t: SL.FIXED, part: PART.HEAD, pivot: headPivot },
+    { s: [0.42, 0.2, 0.42], at: [0, 1.91, 0], c: STEEL, t: SL.FIXED, part: PART.HEAD, pivot: headPivot },
+    { s: [0.53, 0.24, 0.3], at: [0, 0.68, 0], c: '#ffffff', t: SL.TINT },
+    { s: [0.53, 0.06, 0.3], at: [0, 1.34, 0], c: TRIM, t: SL.FIXED },
+    { s: [0.16, 0.5, 0.16], at: [0.14, 1.2, -0.24], c: '#7a5030', t: SL.FIXED },
+    { s: [0.12, 0.1, 0.12], at: [0.14, 1.5, -0.24], c: '#f0f0e0', t: SL.FIXED },
+    { s: [0.05, 1.4, 0.05], at: [-0.33, 0.95, 0.18], c: '#7a4a22', t: SL.FIXED, part: PART.ARM_L, pivot: garrisonArm(-0.33) },
+    { s: [0.02, 1.3, 0.02], at: [-0.33, 0.95, 0.1], c: '#e8e8d8', t: SL.FIXED, part: PART.ARM_L, pivot: garrisonArm(-0.33) },
+  ];
+}
+
+/** Captain: closed helm with a plume, breastplate and pauldrons, a cape and a sword. */
+export function captain(): Box[] {
+  return [
+    ...body({ hair: false }),
+    { s: [0.46, 0.32, 0.44], at: [0, 1.74, 0], c: STEEL, t: SL.FIXED, part: PART.HEAD, pivot: headPivot },
+    { s: [0.3, 0.04, 0.02], at: [0, 1.7, 0.225], c: '#1a1a22', t: SL.FIXED, part: PART.HEAD, pivot: headPivot },
+    { s: [0.08, 0.3, 0.34], at: [0, 2.02, -0.04], c: '#ffffff', t: SL.TINT, part: PART.HEAD, pivot: headPivot },
+    { s: [0.55, 0.46, 0.32], at: [0, 1.1, 0], c: STEEL, t: SL.FIXED },
+    { s: [0.53, 0.3, 0.29], at: [0, 0.66, 0], c: '#ffffff', t: SL.TINT },
+    { s: [0.24, 0.12, 0.26], at: [0.34, 1.37, 0], c: STEEL, t: SL.FIXED, part: PART.ARM_R, pivot: garrisonArm(0.33) },
+    { s: [0.24, 0.12, 0.26], at: [-0.34, 1.37, 0], c: STEEL, t: SL.FIXED, part: PART.ARM_L, pivot: garrisonArm(-0.33) },
+    { s: [0.58, 1.0, 0.06], at: [0, 0.92, -0.19], c: '#ffffff', t: SL.TINT }, // cape
+    { s: [0.6, 0.08, 0.1], at: [0, 1.36, -0.16], c: TRIM, t: SL.FIXED },
+    { s: [0.06, 0.06, 0.95], at: [0.33, 0.78, 0.47], c: '#e6ecf2', t: SL.FIXED, part: PART.ARM_R, pivot: garrisonArm(0.33) },
+    { s: [0.24, 0.05, 0.05], at: [0.33, 0.78, 0.02], c: TRIM, t: SL.FIXED, part: PART.ARM_R, pivot: garrisonArm(0.33) },
+  ];
+}
+
 /** A hunched fish-man of the eldritch shore: big head, bulging eyes, fins and webbed claws. */
 export function deepone(): Box[] {
   const scale = '#ffffff', belly = '#c8d8b0', eye = '#f0f0c0', fin = '#3a6a6a', hp: V3 = [0, 1.3, 0.05];

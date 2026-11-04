@@ -3,6 +3,7 @@
 import type { MapRequest, MapTile } from '../world/map-worker';
 import { LM, SITE_CASTLE, SITE_CITY, SITE_VILLAGE, type Site } from '../world/structures';
 import type { Terrain } from '../world/terrain';
+import { castleHouse } from '../world/castle';
 import { FOG_CELL, LANDMARK_NAMES, landmarkId, siteId, type Discovery } from './discovery';
 
 const TILE_PX = 128;
@@ -149,7 +150,7 @@ export class WorldMap {
     g.font = `bold ${font}px "Cascadia Mono", Consolas, monospace`;
     g.textAlign = 'center';
     for (const s of st.sitesNear(x0, z0, x1, z1, 0)) {
-      if (this.disc.found.has(siteId(s)) || this.disc.isSeen(s.x, s.z)) this.drawSite(g, s, sx(s.x), sz(s.z), dpr, step);
+      if (this.disc.found.has(siteId(s)) || this.disc.rumors.has(siteId(s)) || this.disc.isSeen(s.x, s.z)) this.drawSite(g, s, sx(s.x), sz(s.z), dpr, step);
     }
 
     // Landmarks: found ones show their name, rumoured or glimpsed ones a "?".
@@ -262,7 +263,8 @@ export class WorldMap {
       }
       return;
     }
-    g.fillStyle = castle ? '#5b4a72' : '#f6e7c8';
+    // Ruins are dusky purple; held castles pale stone with the house flag.
+    g.fillStyle = castle ? (s.held ? '#c8c2d2' : '#5b4a72') : '#f6e7c8';
     g.strokeStyle = '#2b1d33';
     g.lineWidth = 1.5 * dpr;
     if (castle) {
@@ -274,6 +276,13 @@ export class WorldMap {
       g.strokeRect(X - 2 * u, Y - 2 * u, 4 * u, 4 * u);
       g.fillStyle = '#ffd98a';
       g.fillRect(X - 0.5 * u, Y - 0.5 * u, u, u * 1.5);
+      if (s.held) {
+        g.fillStyle = '#2b1d33';
+        g.fillRect(X - 0.15 * u, Y - 5.2 * u, 0.3 * u, 2.2 * u);
+        g.fillStyle = castleHouse(s, this.terrain.seed).color;
+        g.fillRect(X + 0.15 * u, Y - 5.2 * u, 1.8 * u, 1.1 * u);
+        g.strokeRect(X + 0.15 * u, Y - 5.2 * u, 1.8 * u, 1.1 * u);
+      }
     } else {
       g.beginPath();
       g.arc(X, Y, 1.5 * u, 0, Math.PI * 2);
@@ -282,9 +291,10 @@ export class WorldMap {
     }
     if (step <= 8 || castle) {
       g.fillStyle = '#2b1d33';
-      g.fillText(s.name, X + 1 * dpr, Y - 4 * u + 1 * dpr);
+      const ly = Y - (s.held ? 6 : 4) * u;
+      g.fillText(s.name, X + 1 * dpr, ly + 1 * dpr);
       g.fillStyle = castle ? '#e9d8ff' : '#fff6e2';
-      g.fillText(s.name, X, Y - 4 * u);
+      g.fillText(s.name, X, ly);
     }
   }
 }
