@@ -116,6 +116,12 @@ export class Discovery {
     this.queue.push([title, sub, kicker]);
   }
 
+  /** A big world notice (a rare creature, a victory): queued like a discovery. */
+  announce(kicker: string, title: string, sub: string): void {
+    this.onSound?.('found');
+    this.toast(title, sub, '', kicker);
+  }
+
   /** A short notice in the same toast slot (e.g. sound settings). */
   notice(kicker: string, title: string): void {
     this.queue.length = 0;

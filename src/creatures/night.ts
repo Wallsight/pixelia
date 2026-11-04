@@ -13,6 +13,8 @@ import type { FireFx } from '../render/fire';
 import type { Post } from './war';
 import type { OrcJob } from './orcs';
 import type { WatchPost } from './watch';
+import type { RareEvent } from './rare';
+import { BATTLE_CALLS, CAMP_BANTER, DOWN_CALLS, ROAD_BANTER, VICTORY_CALLS, exchange } from './banter';
 
 export type FighterKind = 'skeleton' | 'zombie' | 'demon' | 'spider' | 'ghost' | 'troll' | 'wisp' | 'deepone' | 'warrior' | 'archer' | 'mage'
   | 'soldier' | 'bowman' | 'captain' | 'orc' | 'orcspear' | 'shaman' | 'chief' | 'orcwork' | 'wolf';
@@ -62,6 +64,8 @@ export interface Fighter {
   orc: OrcJob | null;
   /** Village tower bowmen: their tower. */
   watch: WatchPost | null;
+  /** A rare creature, or an adventurer come to fight one. */
+  rare: RareEvent | null;
   slot: number;
   raid: { x: number; z: number; r: number } | null;
   /** Besieging a castle. */
@@ -97,6 +101,8 @@ export interface NightHost {
   scatter(x: number, z: number, r: number): void;
   nearestAnimal(x: number, z: number, r: number): Creature | null;
   say(c: Creature, text: string, sec?: number): void;
+  /** An adventurer speaks: a bubble, and a line in the party chat when the player is near. */
+  partySay(c: Creature, party: string, text: string): void;
   sound(ev: NightSound, c: Creature): void;
   /** Townsfolk near a raider: guards turn to fight it, the others hurry home. */
   alarm(raider: Creature): void;
@@ -255,7 +261,7 @@ export class NightDirector {
     const k = KINDS[kind];
     c.fighter = {
       kind, hero: ALLIES.includes(kind) || ORCS.includes(kind), hp: k.hp, max: k.hp, foe: null, cool: rand(0, 1), t: rand(0, 3), down: 0, flash: 0,
-      stone: false, party: null, garrison: null, orc: null, watch: null, slot: 0, raid: null, siege: null, death: k.death, voice: rand(3, 12),
+      stone: false, party: null, garrison: null, orc: null, watch: null, rare: null, slot: 0, raid: null, siege: null, death: k.death, voice: rand(3, 12),
     };
     if (kind === 'wisp' || kind === 'ghost') { c.y = col[0] + (kind === 'wisp' ? rand(0.8, 2) : 0.3); c.ground = col[0]; }
     return c;
@@ -508,8 +514,8 @@ export class NightDirector {
       const foe = this.nearestMonster(lead.x, lead.z, 24);
       const was = p.fighting;
       p.fighting = !!foe;
-      if (p.fighting && !was && this.near(lead)) this.host.say(pick(alive), pick(BATTLE), 2.2);
-      if (!p.fighting && was && this.near(lead)) this.host.say(pick(alive), pick(VICTORY), 2.6);
+      if (p.fighting && !was && this.near(lead)) this.host.partySay(pick(alive), p.name, pick(Math.random() < 0.5 ? BATTLE : BATTLE_CALLS));
+      if (!p.fighting && was && this.near(lead)) this.host.partySay(pick(alive), p.name, pick(Math.random() < 0.4 ? VICTORY : VICTORY_CALLS));
     }
     if (p.mode === 'travel') {
       if (this.night > 0.55 && !p.fighting) this.makeCamp(p);
@@ -528,8 +534,10 @@ export class NightDirector {
     if (p.talk <= 0 && !p.fighting) {
       p.talk = rand(25, 50);
       if (this.near(lead)) {
-        const lines = p.mode === 'camp' ? [pick(CAMP_TALK)] : pick(PARTY_TALK);
-        lines.forEach((l, i) => setTimeout(() => { const m = alive[i % alive.length]; if (!m.gone) this.host.say(m, l, 2.8); }, i * 2900));
+        // Mostly party-chat ribbing, now and then a plainer word.
+        const r = Math.random();
+        const lines = p.mode === 'camp' ? (r < 0.5 ? pick(CAMP_BANTER) : [pick(CAMP_TALK)]) : r < 0.7 ? pick(ROAD_BANTER) : pick(PARTY_TALK);
+        exchange(alive, lines, (m, l) => this.host.partySay(m, p.name, l));
       }
     }
   }
@@ -664,7 +672,10 @@ export class NightDirector {
     if (f.hp > 0) return;
     if (f.hero) {
       f.down = 7;
-      if (this.near(target)) this.host.say(target, pick(f.garrison ? ['Ahh!', 'Kalkanım...', 'Yaralandım!'] : DOWN), 2);
+      if (this.near(target)) {
+        if (f.garrison || f.watch || f.orc) this.host.say(target, pick(['Ahh!', 'Kalkanım...', 'Yaralandım!']), 2);
+        else this.host.partySay(target, f.party?.name ?? f.rare?.partyName ?? 'Grup', pick(Math.random() < 0.5 ? DOWN : DOWN_CALLS));
+      }
       return;
     }
     target.dying = 1e-4;

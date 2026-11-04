@@ -25,6 +25,8 @@ export class WorldMap {
   private fog = document.createElement('canvas');
   private fogKey = '';
   private legend: HTMLDivElement;
+  /** Live world events to mark (rare creatures), set by main. */
+  markers: () => Array<{ x: number; z: number; label: string; done: boolean }> = () => [];
 
   constructor(seed: number, private terrain: Terrain, private disc: Discovery) {
     this.el = document.createElement('div');
@@ -178,6 +180,22 @@ export class WorldMap {
         }
       }
       g.font = `bold ${font}px "Cascadia Mono", Consolas, monospace`;
+    }
+
+    // Rare creatures: a red skull with the beast's name (grey once it has fallen).
+    for (const m of this.markers()) {
+      const X = sx(m.x), Y = sz(m.z);
+      const pulse = m.done ? 1 : 1 + 0.18 * Math.sin(performance.now() / 180);
+      g.font = `bold ${Math.round(20 * dpr * pulse)}px "Cascadia Mono", Consolas, monospace`;
+      g.fillStyle = '#2b1d33';
+      g.fillText('☠', X + dpr, Y + 7 * dpr);
+      g.fillStyle = m.done ? '#9a90a8' : '#ff5a4a';
+      g.fillText('☠', X, Y + 6 * dpr);
+      g.font = `bold ${font}px "Cascadia Mono", Consolas, monospace`;
+      g.fillStyle = '#2b1d33';
+      g.fillText(m.label, X + dpr, Y - 11 * dpr);
+      g.fillStyle = m.done ? '#c8c0d4' : '#ffc0b0';
+      g.fillText(m.label, X, Y - 12 * dpr);
     }
 
     // Player arrow (forward = -sin(yaw), -cos(yaw) in world XZ).

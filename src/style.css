@@ -146,3 +146,14 @@ body.touch #subtitle { bottom: max(10px, env(safe-area-inset-bottom)); max-width
 body.touch #subtitle .who { font-size: 10px; }
 body.touch #subtitle .line { font-size: 14px; }
 @media (orientation: portrait) { body.touch #subtitle { bottom: 200px; max-width: calc(100vw - 24px); } }
+
+/* MMO-style party chat (nearby adventurers) */
+#partychat {
+  position: fixed; left: 12px; bottom: 12px; width: min(440px, calc(100vw - 24px)); pointer-events: none;
+  display: flex; flex-direction: column; gap: 2px; font-size: 14px; text-shadow: 1px 1px #000;
+}
+#partychat .pc-line { background: rgba(14, 10, 20, 0.55); padding: 2px 8px; transition: opacity 0.3s; }
+#partychat .pc-party { color: #7ab8ff; }
+#partychat .pc-who { color: #9ae07a; }
+#partychat .pc-text { color: #e8f0ff; }
+body.touch #partychat { bottom: auto; top: max(110px, calc(env(safe-area-inset-top) + 104px)); font-size: 11px; width: min(300px, calc(100vw - 24px)); }

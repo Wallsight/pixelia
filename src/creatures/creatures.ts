@@ -19,6 +19,8 @@ import { GREAT_DRAGON, GREAT_SCALE, WyrmDirector, type WyrmHost } from './wyrm';
 import { WarDirector, type WarHost } from './war';
 import { OrcDirector } from './orcs';
 import { WatchDirector } from './watch';
+import { RareDirector } from './rare';
+import { nick } from './banter';
 
 const TAU = Math.PI * 2;
 const DESPAWN = 104;
@@ -64,7 +66,7 @@ const SPECIES: SpeciesDef[] = [
     ['demon', M.demon, 6, ['#ffffff']], ['spider', M.spider, 8, ['#3a3038', '#2a2a2e', '#4a3a2e']], ['ghost', M.ghost, 8, ['#ffffff']],
     ['troll', M.troll, 4, ['#c8c8b8', '#b8c0a8']], ['wisp', M.wisp, 10, ['#ffffff', '#c8ffd8']],
     ['deepone', M.deepone, 10, ['#5a8a7a', '#4a7a6a', '#6a8a6a', '#5a7a8a']],
-    ['warrior', M.warrior, 3, ['#ffffff']], ['archer', M.archer, 3, ['#ffffff']], ['mage', M.mage, 3, ['#ffffff']],
+    ['warrior', M.warrior, 6, ['#ffffff']], ['archer', M.archer, 6, ['#ffffff']], ['mage', M.mage, 5, ['#ffffff']],
     // Castle garrisons (spawned by the war director).
     ['soldier', M.soldier, 24, ['#ffffff']], ['bowman', M.bowman, 14, ['#ffffff']], ['captain', M.captain, 3, ['#ffffff']],
   ] as Array<[FighterKind, () => Box[], number, string[]]>).map(([name, model, max, tints]): SpeciesDef => ({
@@ -160,6 +162,11 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
   readonly war: WarDirector;
   readonly orcs: OrcDirector;
   readonly watch: WatchDirector;
+  readonly rare: RareDirector;
+  /** Party chat (set by main): a line from an adventurer near the player. */
+  onPartyChat: ((party: string, who: string, text: string) => void) | null = null;
+  /** Big on-screen notices (set by main). */
+  onAnnounce: ((kicker: string, title: string, sub: string) => void) | null = null;
   readonly fire = new FireFx();
   private species: SpeciesRuntime[] = [];
   private spawnTimer = 0;
@@ -215,6 +222,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
     this.war = new WarDirector(terrain, this, this.nightDir, env, shadows);
     this.orcs = new OrcDirector(terrain, this, this.nightDir);
     this.watch = new WatchDirector(terrain, this, this.nightDir);
+    this.rare = new RareDirector(terrain, this, this.nightDir);
     this.group.add(this.npcs.group, this.fire.group, this.nightDir.group, this.wyrm.group, this.war.group);
   }
 
@@ -245,6 +253,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
     this.war.update(dt, px, pz, night);
     this.orcs.update(dt, px, pz, night);
     this.watch.update(dt, px, pz, night);
+    this.rare.update(dt, px, pz);
     this.wyrm.night = night;
     this.wyrm.update(dt, px, cam.y, pz);
     this.spawnTimer -= dt;
@@ -257,7 +266,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
       for (let i = list.length - 1; i >= 0; i--) {
         const c = list[i];
         const h = rt.def.habitat;
-        const far = Math.hypot(c.x - px, c.z - pz) > (h === 'wyrm' ? 340 : h === 'dragon' ? 260 : h === 'npc' ? 240 : h === 'hero' || h === 'orc' ? 200 : h === 'monster' ? 120 : DESPAWN);
+        const far = Math.hypot(c.x - px, c.z - pz) > (h === 'wyrm' ? 340 : h === 'dragon' ? 260 : h === 'npc' ? 240 : h === 'hero' || h === 'orc' ? 200 : h === 'monster' ? (c.fighter?.rare ? 260 : 120) : DESPAWN);
         const wrongTime = (rt.def.time === -1 && night < 0.3) || (rt.def.time === 1 && night > 0.75);
         const alive = c.dying > 0 ? (c.fighter ? this.nightDir.stepDying(c, dt) : this.stepDying(c, dt))
           : !(far || (wrongTime && Math.random() < dt * 0.2) || !this.step(rt.def, c, dt, night));
@@ -455,8 +464,8 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
       case 'flutter': return this.stepFlutter(def, c, dt, night);
       case 'dragon': return this.stepDragon(def, c, dt);
       case 'npc': return this.npcs.step(c, dt, night);
-      case 'monster': return this.nightDir.step(c, dt);
-      case 'hero': return c.fighter?.garrison ? this.war.step(c, dt) : c.fighter?.watch ? this.watch.step(c, dt) : this.nightDir.step(c, dt);
+      case 'monster': return c.fighter?.rare ? this.rare.step(c, dt) : this.nightDir.step(c, dt);
+      case 'hero': return c.fighter?.garrison ? this.war.step(c, dt) : c.fighter?.watch ? this.watch.step(c, dt) : c.fighter?.rare ? this.rare.step(c, dt) : this.nightDir.step(c, dt);
       case 'wyrm': return this.wyrm.step(c, dt);
       case 'orc': return this.orcs.step(c, dt);
     }
@@ -1111,6 +1120,13 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
   say(c: Creature, text: string, sec?: number): void { this.npcs.bubbles.say(c, text, sec); }
   killAnimal(p: Creature): void { this.kill(p); }
   sound(ev: NightSound, c: Creature): void { this.onSound?.(ev, c); }
+
+  partySay(c: Creature, party: string, text: string): void {
+    this.say(c, text, 2.8);
+    if (c.fighter && Math.hypot(c.x - this.px, c.z - this.pz) < 48) this.onPartyChat?.(party, nick(c, c.fighter.kind), text);
+  }
+
+  announce(kicker: string, title: string, sub: string): void { this.onAnnounce?.(kicker, title, sub); }
   alarm(raider: Creature): void { this.npcs.alarm(raider); }
   hit(target: Creature, dmg: number, from: Creature): void { this.nightDir.hit(target, dmg, from); }
 

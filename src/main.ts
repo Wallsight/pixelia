@@ -18,6 +18,7 @@ import { Soundscape } from './audio/soundscape';
 import { LegendBoard } from './render/legend-board';
 import { EldritchDirector } from './render/eldritch';
 import { Subtitle } from './ui/subtitle';
+import { PartyChat } from './ui/partychat';
 import { villageLayout } from './world/village';
 import { IS_TOUCH, TouchControls } from './ui/touch';
 
@@ -104,6 +105,11 @@ discovery.onSound = (k) => sound.jingle(k);
 // The great dragon talks in subtitles and knows how many legends the player has found.
 const subtitle = new Subtitle();
 creatures.wyrm.onSpeak = (who, text, sec, asleep) => subtitle.show(who, text, sec, asleep);
+// Adventurers near the player chat like an online game's party; rare creatures are announced and marked on the map.
+const partyChat = new PartyChat();
+creatures.onPartyChat = (party, who, text) => partyChat.post(party, who, text);
+creatures.onAnnounce = (kicker, title, sub) => discovery.announce(kicker, title, sub);
+worldMap.markers = () => creatures.rare.markers();
 creatures.wyrm.onSound = (ev, at, text) => sound.wyrm(ev, at, text);
 creatures.wyrm.context = () => ({ found: legendBoard?.foundCount ?? 0, flying: player.flying });
 // Its body is solid: no walking through it, but you can climb onto its back.
@@ -329,6 +335,9 @@ function frame(): void {
         (window as unknown as Record<string, unknown>).__orcs = () => creatures.orcs.info();
         (window as unknown as Record<string, unknown>).__watch = () => creatures.watch.info();
         (window as unknown as Record<string, unknown>).__raid = () => creatures.watch.devRaid();
+        (window as unknown as Record<string, unknown>).__rare = (near = false, hp = 0) => creatures.rare.devStart(near, hp);
+        (window as unknown as Record<string, unknown>).__rinfo = () => creatures.rare.info();
+        (window as unknown as Record<string, unknown>).__map = () => { toggleMap(); return worldMap.open; };
         (window as unknown as Record<string, unknown>).__orda = (capital = true) => creatures.orcs.nearest(player.position.x, player.position.z, capital);
         (window as unknown as Record<string, unknown>).__lookOrc = (job: string, dist = 5, up = 1.6) => {
           const c = creatures.orcs.find(job, player.position.x, player.position.z);
@@ -391,6 +400,7 @@ function frame(): void {
   if (spawned) discovery.update(dt, player.position.x, player.position.z);
   legendBoard?.update(dt);
   subtitle.update(dt);
+  partyChat.update(dt);
   if (spawned) {
     camera.getWorldDirection(camFwd);
     eldritch.update(dt, camera.position, camFwd, daynight.night, focusSample);
