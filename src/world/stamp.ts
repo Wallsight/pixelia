@@ -33,7 +33,7 @@ function castleFor(t: Terrain, site: Site): CastlePlan {
   const key = `${t.seed}:${site.id}`;
   let plan = castleCache.get(key);
   if (!plan) {
-    plan = buildCastle(site, t.seed, gateSide(t, site));
+    plan = buildCastle(site, t.seed, gateSide(t, site), (x, z) => t.sample(x, z).h);
     if (castleCache.size > 48) castleCache.delete(castleCache.keys().next().value!);
     castleCache.set(key, plan);
   }
@@ -88,7 +88,7 @@ function topSolid(blocks: Uint8Array, lx: number, lz: number): number {
 export function placeStructures(t: Terrain, blocks: Uint8Array, x0: number, z0: number, mask: Uint8Array): void {
   const x1 = x0 + RW, z1 = z0 + RW;
   const sites = t.structures.sitesNear(x0, z0, x1, z1, SETTLEMENT_REACH);
-  const castles = sites.filter((s) => s.kind === SITE_CASTLE && Math.max(s.x - x1, x0 - s.x, s.z - z1, z0 - s.z) < 32).map((s) => castleFor(t, s));
+  const castles = sites.filter((s) => s.kind === SITE_CASTLE && Math.max(s.x - x1, x0 - s.x, s.z - z1, z0 - s.z) < 44).map((s) => castleFor(t, s));
   const inCastle = (wx: number, wz: number) => castles.some((c) => Math.max(Math.abs(wx - c.cx), Math.abs(wz - c.cz)) <= c.half);
 
   // --- roads: distance field from every nearby road polyline

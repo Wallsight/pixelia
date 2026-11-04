@@ -6,7 +6,7 @@
 
 import * as THREE from 'three';
 import { BIOME } from '../world/biomes';
-import { LM, SITE_CITY, SITE_VILLAGE, pointAlong, polylineLength, type Site } from '../world/structures';
+import { LM, SITE_CASTLE, SITE_CITY, SITE_VILLAGE, pointAlong, polylineLength, type Site } from '../world/structures';
 import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
 import type { FireFx } from '../render/fire';
@@ -218,6 +218,8 @@ export class NightDirector {
     const a = Math.random() * TAU, d = rand(42, 80);
     const x = this.px + Math.cos(a) * d, z = this.pz + Math.sin(a) * d;
     if (this.settlementNear(x, z, 25)) return;
+    // Not on (or in) a garrisoned castle: they come at it from outside.
+    if (this.terrain.structures.sitesNear(x - 30, z - 30, x + 30, z + 30, 0).some((c) => c.kind === SITE_CASTLE && c.held && Math.max(Math.abs(c.x - x), Math.abs(c.z - z)) < 27)) return;
     const s = this.terrain.sample(x, z);
     let opts = SPAWNS.filter((o) => o.biomes.includes(s.biome));
     if (!opts.length) return;

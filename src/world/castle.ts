@@ -94,8 +94,20 @@ export interface CastleLayout {
 
 const FOUNDATION = 12;
 const MAX_UP = 44;
+/** Longest gate ramp (blocks beyond the levelled pad). */
+const RAMP = 12;
 
 const spot = (u: number, v: number, y: number, fu: number, fv: number): Spot => ({ u, v, y, fu, fv });
+
+/** Where (u) the gate ramp meets the natural ground. */
+export function rampFoot(L: CastleLayout, ground: (x: number, z: number) => number): number {
+  for (let i = 1; i <= RAMP; i++) {
+    const u = L.half + 4 + i;
+    const gy = Math.floor(ground(L.cx + L.gx * u + 0.5, L.cz + L.gz * u + 0.5)) - L.floorY;
+    if (Math.abs(gy) <= i) return u;
+  }
+  return L.half + 4 + RAMP;
+}
 
 /** World position of a castle-local point. */
 export function castleWorld(L: CastleLayout, u: number, v: number): [number, number] {
@@ -157,11 +169,15 @@ export function castleLayout(site: Site, seed: number, gate: number): CastleLayo
   return L;
 }
 
-export function buildCastle(site: Site, seed: number, gate: number): CastlePlan {
+/**
+ * ground: natural terrain height at a world column (when given, a ramp joins the
+ * gate to the surrounding ground, since the castle stands on a levelled pad).
+ */
+export function buildCastle(site: Site, seed: number, gate: number, ground?: (x: number, z: number) => number): CastlePlan {
   const r = (k: number) => hash01(site.gx * 97 + k, 811 + k, site.gz * 61 - k, seed);
   const L = castleLayout(site, seed, gate);
   const { held, half, wallH } = L;
-  const reach = half + 6;
+  const reach = half + 6 + RAMP;
   const w = reach * 2 + 1, d = w, h = FOUNDATION + MAX_UP;
   const cells = new Uint8Array(w * h * d);
   const floorY = L.floorY;
@@ -284,8 +300,23 @@ export function buildCastle(site: Site, seed: number, gate: number): CastlePlan 
     }
   }
   for (const side of [-2, 2]) set(gx * (half + 1) + px * side, 4, gz * (half + 1) + pz * side, B.LANTERN);
-  // A cobbled approach leading out of the gate.
-  for (let k = 1; k <= 5; k++) for (let s = -1; s <= 1; s++) set(gx * (half + k) + px * s, 0, gz * (half + k) + pz * s, B.COBBLE);
+  // A cobbled approach leading out of the gate, then a ramp down (or up) to the
+  // natural ground one block per step, so people and monsters can walk in.
+  for (let k = 1; k <= 4; k++) for (let s = -1; s <= 1; s++) set(gx * (half + k) + px * s, 0, gz * (half + k) + pz * s, B.COBBLE);
+  if (ground) {
+    const foot = rampFoot(L, ground);
+    for (let i = 1; half + 4 + i <= foot; i++) {
+      const u = half + 4 + i;
+      const gy = Math.floor(ground(site.x + gx * u + 0.5, site.z + gz * u + 0.5)) - floorY;
+      const y = Math.max(-i, Math.min(i, gy));
+      for (let s = -2; s <= 2; s++) {
+        const x = gx * u + px * s, z = gz * u + pz * s;
+        for (let k = y - 8; k < y; k++) set(x, k, z, C_FILL);
+        set(x, y, z, Math.abs(s) <= 1 ? B.COBBLE : B.GRAVEL);
+        for (let k = y + 1; k <= y + 5; k++) set(x, k, z, C_AIR);
+      }
+    }
+  }
 
   // --- keep: tall hollow block with floors, lit windows and a slate roof
   const { kw, kd, keepH } = L;

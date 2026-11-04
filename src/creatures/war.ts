@@ -13,8 +13,8 @@
 
 import * as THREE from 'three';
 import { BIOME } from '../world/biomes';
-import { SITE_CASTLE, type Site } from '../world/structures';
-import { castleLayout, castleWorld, castleYaw, type CastleLayout, type Spot } from '../world/castle';
+import { SITE_CASTLE, pointAlong, polylineLength, type Site } from '../world/structures';
+import { castleLayout, castleWorld, castleYaw, rampFoot, type CastleLayout, type Spot } from '../world/castle';
 import { gateSide } from '../world/stamp';
 import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
@@ -94,6 +94,12 @@ interface Siege {
   orderT: number;
   shoutT: number;
   trolls: number;
+  /** The way in: points along the castle's road (far to near), ending on the gate apron. */
+  path: Array<[number, number]>;
+  /** Each besieger's next point on the path. */
+  wp: Map<Creature, number>;
+  /** Progress check per besieger: best distance to its order and when it last improved. */
+  prog: Map<Creature, { d: number; t: number; skips: number }>;
 }
 
 export interface WarHost {
@@ -151,7 +157,7 @@ const AFTER_SIEGE = [
 ];
 const AFTER_TROLL = ['Kapının önündeki taş troll...', 'Güneş doğunca taş kesildi. Hâlâ orada duruyor.'];
 const AFTER_BREACH = ['Kapıyı kırdılar, gördün mü?', 'Sabaha kadar yeniden kurduk. Ellerim hâlâ titriyor.'];
-const GATE_HP = 110;
+const GATE_HP = 150;
 
 const TROUSERS = ['#3a3a4a', '#4a3a2e', '#2e3440', '#4a4a4a'];
 const HAIR = ['#2a1e16', '#4a3020', '#7a5030', '#1a1a1a', '#9a9a9a'];
@@ -374,7 +380,7 @@ export class WarDirector {
   }
 
   private startSiege(g: Garrison): void {
-    g.siege = { phase: 'alarm', t: 6, wave: 0, nextWave: 0, foes: [], orderT: 0, shoutT: 4, trolls: 0 };
+    g.siege = { phase: 'alarm', t: 6, wave: 0, nextWave: 0, foes: [], orderT: 0, shoutT: 4, trolls: 0, path: this.approach(g), wp: new Map(), prog: new Map() };
     this.siegeHomes(g, true);
     // The horn from the gate tower, then the captain.
     const hornist = g.posts.find((p) => p.duty === 'watch' && p.c)?.c ?? this.captainOf(g);
@@ -397,6 +403,25 @@ export class WarDirector {
     }
   }
 
+  /** The besiegers' way in: up the road the gate faces (roads wind and cross bridges), then to the gate. */
+  private approach(g: Garrison): Array<[number, number]> {
+    const L = g.L, out: Array<[number, number]> = [];
+    // The gate ramp stands above (or below) the ground with steep sides: climb it from its foot.
+    const foot = rampFoot(L, (x, z) => this.terrain.sample(x, z).h);
+    const road = this.terrain.structures.roadsOf(g.site)[0];
+    if (road) {
+      const len = polylineLength(road.pts);
+      for (let d = Math.max(46, foot + 14); d >= foot + 5; d -= 3) {
+        const [x, z] = pointAlong(road.pts, road.a === g.site ? d : len - d);
+        out.push([x, z]);
+      }
+    } else {
+      for (const u of [foot + 24, foot + 10]) out.push(castleWorld(L, u, 0));
+    }
+    out.push(castleWorld(L, foot + 2, 0), castleWorld(L, L.half + 6, 0));
+    return out;
+  }
+
   private spawnWave(g: Garrison, wave: number): void {
     const s = g.siege!, L = g.L;
     const b = this.terrain.sample(L.cx, L.cz).biome;
@@ -406,15 +431,14 @@ export class WarDirector {
       : wave === 1 ? ['skeleton', 'zombie', woods ? 'spider' : 'skeleton', woods ? 'spider' : 'zombie', hot ? 'demon' : 'skeleton', 'zombie']
       : ['troll', Math.random() < 0.5 ? 'troll' : 'skeleton', 'skeleton', 'zombie', hot ? 'demon' : 'skeleton'];
     // They come up the road the gate faces, out of the dark.
-    const v0 = rand(-6, 6);
     for (const kind of kinds) {
-      let c: Creature | null = null;
-      for (const dist of [42, 32, 24]) {
-        const [x, z] = castleWorld(L, L.half + dist + rand(-3, 3), v0 + rand(-3, 3));
-        c = this.night.spawn(kind, x, z);
-        if (c) break;
+      let c: Creature | null = null, at = 0;
+      for (at = 0; at < Math.min(4, s.path.length - 1) && !c; at++) {
+        const [x, z] = s.path[at];
+        c = this.night.spawn(kind, x + rand(-1.5, 1.5), z + rand(-1.5, 1.5));
       }
       if (!c) continue;
+      s.wp.set(c, at);
       if (kind === 'troll') { this.night.toughen(c, 110); s.trolls++; }
       c.fighter!.siege = { x: c.x, z: c.z, fx: c.x, fz: c.z, pound: null };
       s.foes.push(c);
@@ -437,6 +461,25 @@ export class WarDirector {
     for (const c of order) {
       const f = c.fighter!;
       if (!f.siege) continue;
+      // Still on the road: on to the next point.
+      let i = s.wp.get(c) ?? s.path.length;
+      while (i < s.path.length && Math.hypot(s.path[i][0] - c.x, s.path[i][1] - c.z) < 2.5) i++;
+      // Stuck (a railing, a tree, a ledge): skip ahead, and in the end let it wander off.
+      const pr = s.prog.get(c) ?? { d: 1e9, t: this.time, skips: 0 };
+      s.prog.set(c, pr);
+      const dNow = Math.hypot(f.siege.x - c.x, f.siege.z - c.z);
+      if (dNow < pr.d - 0.5 || f.siege.pound) { pr.d = dNow; pr.t = this.time; }
+      else if (this.time - pr.t > 7 && dNow > 1.5) {
+        pr.t = this.time; pr.d = 1e9; pr.skips++;
+        if (pr.skips > 4) { f.siege = null; s.foes = s.foes.filter((x) => x !== c); continue; }
+        if (i < s.path.length) i++;
+      }
+      s.wp.set(c, i);
+      if (i < s.path.length && Math.hypot(c.x - gx, c.z - gz) > 9) {
+        const [x, z] = s.path[i];
+        f.siege.x = x; f.siege.z = z; f.siege.fx = x; f.siege.fz = z; f.siege.pound = null;
+        continue;
+      }
       if (!closed) { f.siege.x = kx; f.siege.z = kz; f.siege.fx = kx; f.siege.fz = kz; f.siege.pound = null; continue; }
       let slot = -1, bd = 1e9;
       slots.forEach(([x, z], i) => { const d = Math.hypot(x - c.x, z - c.z); if (!taken.has(i) && d < bd) { bd = d; slot = i; } });
@@ -458,7 +501,7 @@ export class WarDirector {
     const gate = g.gate, L = g.L;
     if (gate.broken) return;
     const troll = c.fighter!.kind === 'troll';
-    gate.hp -= troll ? dmg * 2.5 : dmg;
+    gate.hp -= troll ? dmg * 2 : dmg;
     gate.shake = troll ? 0.5 : 0.25;
     const [x, z] = castleWorld(L, L.half, 0);
     if (this.time - gate.boomT > 0.3 && Math.hypot(x - this.px, z - this.pz) < 170) {
@@ -646,11 +689,11 @@ export class WarDirector {
       // Back down the stairs first.
       if (p.route && p.ri > 0) {
         const [x, z] = p.route[p.ri - 1];
-        if (this.host.walkToward(c, x, z, 1.4, dt) === 'arrived') p.ri--;
+        if (this.walk(p.g, c, x, z, 1.4, dt) === 'arrived') p.ri--;
         return p.t > 0;
       }
       const [x, z] = castleWorld(L, L.keepDoor.u, L.keepDoor.v);
-      return this.host.walkToward(c, x, z, 1.4, dt) !== 'arrived' && p.t > 0;
+      return this.walk(p.g, c, x, z, 1.4, dt) !== 'arrived' && p.t > 0;
     }
 
     switch (p.duty) {
@@ -725,7 +768,7 @@ export class WarDirector {
     if (d > reach) {
       const chase = !hold || (g.gate.broken && Math.hypot(foe.x - p.hx, foe.z - p.hz) < 7);
       // Patrols cannot leave the wall walk: they shout and watch.
-      if (p.duty === 'patrol' || !chase || this.host.walkToward(c, foe.x, foe.z, 2.4, dt) === 'blocked') {
+      if (p.duty === 'patrol' || !chase || this.walk(p.g, c, foe.x, foe.z, 2.4, dt) === 'blocked') {
         if (hold && !chase) this.goHome(c, p, dt, 1.6);
         this.face(c, Math.atan2(foe.x - c.x, foe.z - c.z), dt);
       }
@@ -751,7 +794,7 @@ export class WarDirector {
       return true;
     }
     const tx = p.dir > 0 ? bx : ax, tz = p.dir > 0 ? bz : az;
-    const r = this.host.walkToward(c, tx, tz, 1.05, dt);
+    const r = this.walk(p.g, c, tx, tz, 1.05, dt);
     if (r === 'arrived' || (r === 'blocked' && Math.random() < dt)) { p.dir = -p.dir; p.t = rand(3, 7); }
     if (p.g.night) this.torch(c, dt);
     return true;
@@ -776,7 +819,7 @@ export class WarDirector {
       }
       p.t -= dt;
       const [tx, tz, lx, lz] = p.leg;
-      if (this.host.walkToward(c, tx, tz, 1.2, dt) === 'arrived') {
+      if (this.walk(p.g, c, tx, tz, 1.2, dt) === 'arrived') {
         this.face(c, Math.atan2(lx - c.x, lz - c.z), dt);
         if (p.dir === 0) { p.dir = 1; p.t = rand(8, 14); this.say(c, pick(NIGHT_ROUND), 2.4); }
       }
@@ -788,7 +831,7 @@ export class WarDirector {
     if (d.rest > 4 && d.inspect?.c && !d.inspect.c.gone) {
       const q = d.inspect.c;
       const tx = q.x + Math.sin(q.yaw) * 1.8, tz = q.z + Math.cos(q.yaw) * 1.8;
-      if (this.host.walkToward(c, tx, tz, 1.4, dt) === 'arrived') {
+      if (this.walk(p.g, c, tx, tz, 1.4, dt) === 'arrived') {
         this.face(c, Math.atan2(q.x - c.x, q.z - c.z), dt);
         if (!d.said) { d.said = true; this.say(c, pick([...INSPECT, `${g.L.house!.name} için!`]), 2.6); }
       }
@@ -850,6 +893,28 @@ export class WarDirector {
 
   // ------------------------------------------------------------ helpers
 
+  /**
+   * Walk, but cross the gate wall only through the gate: when the target lies on the
+   * other side, first line up at the gate mouth on this side, then go straight through.
+   */
+  private walk(g: Garrison, c: Creature, tx: number, tz: number, speed: number, dt: number): 'moving' | 'arrived' | 'blocked' {
+    const L = g.L;
+    const loc = (x: number, z: number) => {
+      const dx = x - (L.cx + 0.5), dz = z - (L.cz + 0.5);
+      return [L.gx * dx + L.gz * dz, L.px * dx + L.pz * dz];
+    };
+    const [cu, cv] = loc(c.x, c.z), [tu] = loc(tx, tz);
+    const inner = L.half - 2.5, outer = L.half + 0.5;
+    // (Targets up on the gate wall lie inside the band and need no detour.)
+    const across = (cu < inner && tu > outer) || (cu > outer && tu < inner);
+    if (across && Math.abs(cu - L.half) < 30) {
+      const here = cu < inner ? L.half - 3.5 : L.half + 1.5, there = cu < inner ? L.half + 1.5 : L.half - 3.5;
+      const [mx, mz] = castleWorld(L, Math.abs(cv) > 0.6 ? here : there, 0);
+      return this.host.walkToward(c, mx, mz, speed, dt) === 'blocked' ? 'blocked' : 'moving';
+    }
+    return this.host.walkToward(c, tx, tz, speed, dt);
+  }
+
   private atHome(p: Post): boolean {
     return !!p.c && Math.hypot(p.c.x - p.hx, p.c.z - p.hz) < 0.9;
   }
@@ -858,12 +923,12 @@ export class WarDirector {
   private goHome(c: Creature, p: Post, dt: number, speed: number): boolean {
     if (p.route && p.ri < p.route.length) {
       const [x, z] = p.route[p.ri];
-      if (this.host.walkToward(c, x, z, speed, dt) === 'arrived') p.ri++;
+      if (this.walk(p.g, c, x, z, speed, dt) === 'arrived') p.ri++;
       return false;
     }
     if (Math.hypot(c.x - p.hx, c.z - p.hz) < 0.6) return true;
     if (p.lunge > 0) return true;
-    return this.host.walkToward(c, p.hx, p.hz, speed, dt) === 'arrived';
+    return this.walk(p.g, c, p.hx, p.hz, speed, dt) === 'arrived';
   }
 
   private face(c: Creature, yaw: number, dt: number): void {
