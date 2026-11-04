@@ -326,6 +326,13 @@ function frame(): void {
         (window as unknown as Record<string, unknown>).__war = () => creatures.war.info();
         (window as unknown as Record<string, unknown>).__castle = () => creatures.war.nearestCastle(player.position.x, player.position.z);
         (window as unknown as Record<string, unknown>).__siege = () => creatures.war.devSiege();
+        // Dev: put the camera somewhere (degrees; fly keeps it there).
+        (window as unknown as Record<string, unknown>).__cam = (x: number, y: number, z: number, yaw = 0, pitch = 0, fly = true) => {
+          player.position.set(x, y, z);
+          player.yaw = (yaw * Math.PI) / 180; player.pitch = (pitch * Math.PI) / 180;
+          player.flying = fly;
+          return [x, y, z];
+        };
         // Dev: hear the dragon rumour and stand in front of the legends board.
         (window as unknown as Record<string, unknown>).__board = () => {
           const l = terrain.landmarks.lair();

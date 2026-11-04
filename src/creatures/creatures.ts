@@ -7,6 +7,7 @@ import { createCreatureMaterial, type EnvUniforms } from '../render/materials';
 import { LAYER_CREATURE_CASTER } from '../render/shadows';
 import { B, COLLIDES, HEIGHT, HEIGHT8, KIND, KIND_LEAVES, KIND_PLANT, SEA, isLiquid } from '../world/blocks';
 import { BIOME } from '../world/biomes';
+import { SITE_CASTLE } from '../world/structures';
 import type { Terrain } from '../world/terrain';
 import type { World } from '../world/world';
 import { buildRig, type Box } from './rig';
@@ -359,6 +360,9 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
       // Wild animals keep out of the city.
       const city = this.terrain.city;
       if (city && def.habitat === 'ground' && Math.hypot(x - city.x, z - city.z) < 110) return;
+      // ...and out of garrisoned castles (and off their walls).
+      if (def.habitat === 'ground' && this.terrain.structures.sitesNear(x - 30, z - 30, x + 30, z + 30, 0)
+        .some((c) => c.kind === SITE_CASTLE && c.held && Math.max(Math.abs(c.x - x), Math.abs(c.z - z)) < 30)) return;
       const n = Math.min(def.max - rt.list.length, Math.round(rand(def.group[0], def.group[1])));
       const tint = new THREE.Color(def.tints[Math.floor(Math.random() * def.tints.length)]);
       // Snowy hares.

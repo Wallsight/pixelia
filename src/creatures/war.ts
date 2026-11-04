@@ -157,7 +157,7 @@ const AFTER_SIEGE = [
 ];
 const AFTER_TROLL = ['Kapının önündeki taş troll...', 'Güneş doğunca taş kesildi. Hâlâ orada duruyor.'];
 const AFTER_BREACH = ['Kapıyı kırdılar, gördün mü?', 'Sabaha kadar yeniden kurduk. Ellerim hâlâ titriyor.'];
-const GATE_HP = 150;
+const GATE_HP = 160;
 
 const TROUSERS = ['#3a3a4a', '#4a3a2e', '#2e3440', '#4a4a4a'];
 const HAIR = ['#2a1e16', '#4a3020', '#7a5030', '#1a1a1a', '#9a9a9a'];
@@ -292,7 +292,7 @@ export class WarDirector {
     if (g.night && dPlayer < 130) {
       for (const b of g.L.braziers) {
         const [x, z] = castleWorld(g.L, b.u, b.v);
-        this.host.fire.burn(x, g.L.floorY + b.y, z, dt, 0.75);
+        this.host.fire.brazier(x, g.L.floorY + b.y, z, dt);
       }
     }
 
@@ -926,8 +926,13 @@ export class WarDirector {
       if (this.walk(p.g, c, x, z, speed, dt) === 'arrived') p.ri++;
       return false;
     }
-    if (Math.hypot(c.x - p.hx, c.z - p.hz) < 0.6) return true;
     if (p.lunge > 0) return true;
+    if (Math.hypot(c.x - p.hx, c.z - p.hz) < 0.6) {
+      // Settle onto the exact spot, so ranks and pairs line up.
+      const k = Math.min(1, dt * 3);
+      c.x += (p.hx - c.x) * k; c.z += (p.hz - c.z) * k;
+      return true;
+    }
     return this.walk(p.g, c, p.hx, p.hz, speed, dt) === 'arrived';
   }
 

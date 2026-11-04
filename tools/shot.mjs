@@ -2,20 +2,27 @@
 // waits until the world is ready and saves screenshots + console errors.
 // Usage: node tools/shot.mjs <outDir> "<query1>" ["<query2>" ...]
 //   query example: "tp=120,-40&yaw=45&pitch=-15"
+// Env: SETTLE (ms), HOLD, EVAL (run once before the first shot), REPEAT + EVERY (ms)
+// take more shots over time with EACH evaluated before every one, NAME (file prefix).
+// On Linux (the test container, tools/container) WebGL runs on SwiftShader.
 import { spawn } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const [outDir, ...queries] = process.argv.slice(2);
-const CHROME = process.env.CHROME ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe';
+const LINUX = process.platform === 'linux';
+const CHROME = process.env.CHROME ?? (LINUX ? '/usr/bin/chromium' : 'C:/Program Files/Google/Chrome/Application/chrome.exe');
+const GPU = LINUX
+  ? ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-dev-shm-usage', '--ignore-gpu-blocklist']
+  : ['--enable-gpu', '--ignore-gpu-blocklist', '--use-angle=d3d11'];
 const PORT = 9333;
 const profile = mkdtempSync(join(tmpdir(), 'pixelia-chrome-'));
 
 const chrome = spawn(CHROME, [
   '--headless=new', `--remote-debugging-port=${PORT}`, '--remote-debugging-address=127.0.0.1',
   `--user-data-dir=${profile}`, '--window-size=1280,720', '--no-first-run', '--no-default-browser-check',
-  '--enable-gpu', '--autoplay-policy=no-user-gesture-required', '--ignore-gpu-blocklist', '--use-angle=d3d11', 'about:blank',
+  '--autoplay-policy=no-user-gesture-required', ...GPU, 'about:blank',
 ], { stdio: 'ignore' });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -81,11 +88,19 @@ for (const q of queries) {
     const r = await send('Runtime.evaluate', { expression: process.env.EVAL, returnByValue: true, awaitPromise: true });
     console.log('eval:', JSON.stringify(r.result?.result?.value ?? r.result));
   }
-  const stats = await send('Runtime.evaluate', { expression: "document.getElementById('debug').textContent" });
-  const shot = await send('Page.captureScreenshot', { format: 'png' });
-  const file = join(outDir, `shot${n}.png`);
-  writeFileSync(file, Buffer.from(shot.result.data, 'base64'));
-  console.log(`${file} ready=${ready} (${((Date.now() - t0) / 1000).toFixed(1)}s)\n${stats.result?.result?.value ?? ''}`);
+  const reps = Number(process.env.REPEAT ?? 1);
+  for (let k = 0; k < reps; k++) {
+    if (k > 0) await sleep(Number(process.env.EVERY ?? 5000));
+    if (process.env.EACH) {
+      const r = await send('Runtime.evaluate', { expression: process.env.EACH, returnByValue: true, awaitPromise: true });
+      console.log('each:', JSON.stringify(r.result?.result?.value ?? r.result));
+    }
+    const stats = await send('Runtime.evaluate', { expression: "document.getElementById('debug').textContent" });
+    const shot = await send('Page.captureScreenshot', { format: 'png' });
+    const file = join(outDir, `${process.env.NAME ?? 'shot'}${n}${reps > 1 ? `_${k}` : ''}.png`);
+    writeFileSync(file, Buffer.from(shot.result.data, 'base64'));
+    console.log(`${file} ready=${ready} (${((Date.now() - t0) / 1000).toFixed(1)}s)${k === 0 ? `\n${stats.result?.result?.value ?? ''}` : ''}`);
+  }
 }
 if (logs.length) console.log('console:\n' + logs.slice(0, 30).join('\n'));
 ws.close();
