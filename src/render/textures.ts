@@ -439,6 +439,25 @@ const painters: Record<TileName, (c: Canvas) => void> = {
   banner_green(c) { banner(c, '#2f7a44'); },
   banner_black(c) { banner(c, '#2c2832'); },
   banner_purple(c) { banner(c, '#6a3a8a'); },
+  hide(c) {
+    // Stretched, stitched leather.
+    c.field(pal('#8a6a48', '#967452', '#a2805c', '#7c5e40'), 5, 0.4);
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) if (c.rng() < 0.08) c.set(x, y, hex('#6a4e34'));
+    for (let i = 1; i < TILE; i += 3) { c.set(i, 7, hex('#3e2c1c')); c.set(7, i, hex('#3e2c1c')); }
+  },
+  skull(c) {
+    c.field(pal('#d8cfb8', '#e2dac6', '#ece6d6', '#cbc1a8'), 4, 0.3);
+    const dark = hex('#2a201a');
+    for (const [x0, y0] of [[3, 5], [10, 5]]) for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) c.set(x0 + x, y0 + y, dark);
+    c.set(7, 9, dark); c.set(8, 9, dark); c.set(7, 10, dark);
+    for (let x = 4; x <= 11; x++) { c.set(x, 12, hex('#b8ad92')); if (x % 2) c.set(x, 13, dark); }
+  },
+  war_banner(c) {
+    // Dark red cloth, a black band, three white claw marks.
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) c.set(x, y, hex(c.rng() < 0.15 ? '#6a1a18' : '#8a2420'));
+    for (let x = 0; x < TILE; x++) { c.set(x, 0, hex('#1e1614')); c.set(x, 1, hex('#1e1614')); c.set(x, 15, hex('#1e1614')); }
+    for (const x0 of [4, 7, 10]) for (let y = 3; y <= 12; y++) c.set(x0 + Math.floor((y - 3) / 4), y, hex('#e8e0d0'));
+  },
   crate(c) {
     planks(c, pal('#9a7848', '#a88452', '#b4905c', '#86663c'));
     for (let i = 0; i < TILE; i++) { c.set(i, 0, hex('#5a4024')); c.set(i, 15, hex('#5a4024')); c.set(0, i, hex('#5a4024')); c.set(15, i, hex('#5a4024')); c.set(i, i, hex('#6a4c2c')); }
@@ -701,7 +720,7 @@ function mushroom(c: Canvas, cap: RGB[], spots: boolean): void {
 // ---------------------------------------------------------------- pastel grade
 /** Global art direction: softer saturation, lifted lightness, slightly warm. */
 /** Tiles that keep more of their saturation (liquids, glowing things). */
-const SOFT_PASTEL = new Set<string>(['water', 'deep_water', 'lava', 'magma', 'glyph', 'kelp', 'ember_flower', 'gold', 'saber_blade', 'saber_hilt', 'booth_blue', 'door_green', 'window_wood', 'cloth_red', 'cloth_yellow', 'roof_red', 'banner_red', 'banner_blue', 'banner_green', 'banner_black', 'banner_purple']);
+const SOFT_PASTEL = new Set<string>(['water', 'deep_water', 'lava', 'magma', 'glyph', 'kelp', 'ember_flower', 'gold', 'saber_blade', 'saber_hilt', 'booth_blue', 'door_green', 'window_wood', 'cloth_red', 'cloth_yellow', 'roof_red', 'banner_red', 'banner_blue', 'banner_green', 'banner_black', 'banner_purple', 'war_banner']);
 
 export const PASTEL = { saturation: 0.72, lift: 0.2, warmth: 0.02 };
 

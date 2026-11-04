@@ -11,6 +11,8 @@ import type { Terrain } from '../world/terrain';
 import type { Spot } from '../world/village';
 import { LANDMARK_NAMES, type Discovery } from '../ui/discovery';
 
+/** Board line for the orc capital (a site, not a landmark). */
+const ORDA = 100;
 /** Board lines: landmark kind and the work it tips its hat to. */
 const ENTRIES: Array<[number, string]> = [
   [LM.PLATFORM, 'Harry Potter'],
@@ -29,9 +31,10 @@ const ENTRIES: Array<[number, string]> = [
   [LM.PHONE_BOX, 'Doctor Who'],
   [LM.SUNKEN_TEMPLE, 'Lovecraft'],
   [LM.DRAGON_LAIR, 'Pixelia efsanesi'],
+  [ORDA, 'Pixelia efsanesi'],
 ];
 
-const W = 360, H = 436;
+const W = 360, H = 458;
 const BOARD_W = 3.2, BOARD_H = BOARD_W * (H / W);
 
 export class LegendBoard {
@@ -79,10 +82,12 @@ export class LegendBoard {
     this.redraw(this.kinds(d.found), this.kinds(d.rumors));
   }
 
-  /** Landmark kinds behind a set of discovery ids ("l:gx,gz"). */
+  /** Landmark kinds behind a set of discovery ids ("l:gx,gz"; the orda is "s:gx,gz"). */
   private kinds(ids: Set<string>): Set<number> {
     const out = new Set<number>();
+    const cap = this.terrain.structures.capital();
     for (const id of ids) {
+      if (cap && id === `s:${cap[0]},${cap[1]}`) { out.add(ORDA); continue; }
       const m = /^l:(-?\d+),(-?\d+)$/.exec(id);
       if (!m) continue;
       const lm = this.terrain.landmarks.at(Number(m[1]), Number(m[2]));
@@ -136,7 +141,7 @@ export class LegendBoard {
       // Unfound places stay hidden: the name only appears once found or rumoured.
       g.font = 'bold 14px "Cascadia Mono", Consolas, monospace';
       g.fillStyle = got ? '#2e2118' : rumour ? '#5a4030' : '#9a8460';
-      g.fillText(got || rumour ? LANDMARK_NAMES[kind] : '? ? ? ? ?', 44, y + 1);
+      g.fillText(got || rumour ? (kind === ORDA ? 'Ork Ordası' : LANDMARK_NAMES[kind]) : '? ? ? ? ?', 44, y + 1);
       g.font = '12px "Cascadia Mono", Consolas, monospace';
       g.fillStyle = got ? '#6a3a6a' : '#a8946c';
       g.textAlign = 'right';

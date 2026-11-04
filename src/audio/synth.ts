@@ -459,6 +459,13 @@ export function horn(e: AudioEngine, out: AudioNode, t: number): number {
   return end;
 }
 
+/** A great orc war drum: a deep skin thump with a hollow body ring. */
+export function warDrum(e: AudioEngine, out: AudioNode, t: number): number {
+  burst(e, out, t, 'brown', 'lowpass', 220, 0.8, 0.002, 0.8, 0.22);
+  tone(e, out, t, 'triangle', rnd(150, 165), 90, 0.002, 0.18, 0.12);
+  return tone(e, out, t, 'sine', 88, 46, 0.003, 0.9, 0.55);
+}
+
 /** Something heavy striking a wooden gate: a deep boom and a creak of timber. */
 export function gateBoom(e: AudioEngine, out: AudioNode, t: number): number {
   burst(e, out, t, 'brown', 'lowpass', 260, 0.9, 0.003, 0.9, 0.35);

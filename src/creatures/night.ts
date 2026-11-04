@@ -6,23 +6,26 @@
 
 import * as THREE from 'three';
 import { BIOME } from '../world/biomes';
-import { LM, SITE_CASTLE, SITE_CITY, SITE_VILLAGE, pointAlong, polylineLength, type Site } from '../world/structures';
+import { LM, SITE_CITY, SITE_VILLAGE, pointAlong, polylineLength, type Site } from '../world/structures';
 import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
 import type { FireFx } from '../render/fire';
 import type { Post } from './war';
+import type { OrcJob } from './orcs';
 
 export type FighterKind = 'skeleton' | 'zombie' | 'demon' | 'spider' | 'ghost' | 'troll' | 'wisp' | 'deepone' | 'warrior' | 'archer' | 'mage'
-  | 'soldier' | 'bowman' | 'captain';
+  | 'soldier' | 'bowman' | 'captain' | 'orc' | 'orcspear' | 'shaman' | 'chief' | 'orcwork' | 'wolf';
 export const MONSTERS: FighterKind[] = ['skeleton', 'zombie', 'demon', 'spider', 'ghost', 'troll', 'wisp', 'deepone'];
 export const HEROES: FighterKind[] = ['warrior', 'archer', 'mage'];
 /** Castle garrisons (run by the war director). */
 export const GARRISON: FighterKind[] = ['soldier', 'bowman', 'captain'];
+/** Orc camps (run by the orc director) and their wolves. */
+export const ORCS: FighterKind[] = ['orc', 'orcspear', 'shaman', 'chief', 'orcwork', 'wolf'];
 /** Everyone the monsters go for. */
 export const ALLIES: FighterKind[] = [...HEROES, ...GARRISON];
 
 /** Night sounds the soundscape plays. */
-export type NightSound = 'groan' | 'rattle' | 'growl' | 'hiss' | 'wail' | 'swing' | 'hit' | 'clang' | 'twang' | 'zap' | 'poof' | 'heal' | 'gurgle' | 'horn' | 'boom';
+export type NightSound = 'groan' | 'rattle' | 'growl' | 'hiss' | 'wail' | 'swing' | 'hit' | 'clang' | 'twang' | 'zap' | 'poof' | 'heal' | 'gurgle' | 'horn' | 'boom' | 'drum' | 'howl' | 'anvil';
 
 /** A besieger's orders from the war director: where to go and, at a closed gate, what to pound. */
 export interface SiegeOrder {
@@ -54,6 +57,8 @@ export interface Fighter {
   party: Party | null;
   /** Castle soldiers: their post in the garrison. */
   garrison: Post | null;
+  /** Orcs: their job in the camp. */
+  orc: OrcJob | null;
   slot: number;
   raid: { x: number; z: number; r: number } | null;
   /** Besieging a castle. */
@@ -123,6 +128,12 @@ const KINDS: Record<FighterKind, KindDef> = {
   soldier: { hp: 26, speed: 1.5, dmg: 3, cool: 1.1, reach: 2.4, death: 'smoke', chase: false, voice: null },
   bowman: { hp: 18, speed: 1.5, dmg: 2.5, cool: 1.7, reach: 24, death: 'smoke', chase: false, voice: null },
   captain: { hp: 34, speed: 1.6, dmg: 3.5, cool: 1.0, reach: 2.2, death: 'smoke', chase: false, voice: null },
+  orc: { hp: 30, speed: 1.5, dmg: 3.5, cool: 1.2, reach: 2.2, death: 'smoke', chase: false, voice: null },
+  orcspear: { hp: 22, speed: 1.6, dmg: 3, cool: 2.2, reach: 18, death: 'smoke', chase: false, voice: null },
+  shaman: { hp: 20, speed: 1.2, dmg: 4, cool: 2.6, reach: 16, death: 'smoke', chase: false, voice: null },
+  chief: { hp: 60, speed: 1.6, dmg: 6, cool: 1.5, reach: 2.6, death: 'smoke', chase: false, voice: null },
+  orcwork: { hp: 18, speed: 1.4, dmg: 2, cool: 1.4, reach: 1.8, death: 'smoke', chase: false, voice: null },
+  wolf: { hp: 16, speed: 2.6, dmg: 2.5, cool: 1.0, reach: 1.7, death: 'smoke', chase: true, voice: 'growl' },
 };
 
 /** Combat numbers of a fighter kind (for the war director). */
@@ -218,8 +229,8 @@ export class NightDirector {
     const a = Math.random() * TAU, d = rand(42, 80);
     const x = this.px + Math.cos(a) * d, z = this.pz + Math.sin(a) * d;
     if (this.settlementNear(x, z, 25)) return;
-    // Not on (or in) a garrisoned castle: they come at it from outside.
-    if (this.terrain.structures.sitesNear(x - 30, z - 30, x + 30, z + 30, 0).some((c) => c.kind === SITE_CASTLE && c.held && Math.max(Math.abs(c.x - x), Math.abs(c.z - z)) < 27)) return;
+    // Not on (or in) a garrisoned castle or an orc camp: they come at it from outside.
+    if (this.terrain.structures.guarded(x, z, 6)) return;
     const s = this.terrain.sample(x, z);
     let opts = SPAWNS.filter((o) => o.biomes.includes(s.biome));
     if (!opts.length) return;
@@ -240,8 +251,8 @@ export class NightDirector {
     if (!c) return null;
     const k = KINDS[kind];
     c.fighter = {
-      kind, hero: ALLIES.includes(kind), hp: k.hp, max: k.hp, foe: null, cool: rand(0, 1), t: rand(0, 3), down: 0, flash: 0,
-      stone: false, party: null, garrison: null, slot: 0, raid: null, siege: null, death: k.death, voice: rand(3, 12),
+      kind, hero: ALLIES.includes(kind) || ORCS.includes(kind), hp: k.hp, max: k.hp, foe: null, cool: rand(0, 1), t: rand(0, 3), down: 0, flash: 0,
+      stone: false, party: null, garrison: null, orc: null, slot: 0, raid: null, siege: null, death: k.death, voice: rand(3, 12),
     };
     if (kind === 'wisp' || kind === 'ghost') { c.y = col[0] + (kind === 'wisp' ? rand(0.8, 2) : 0.3); c.ground = col[0]; }
     return c;

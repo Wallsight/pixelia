@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 import { hash01 } from '../engine/noise';
-import { LM, SITE_CASTLE, SITE_CITY, SITE_VILLAGE, pointAlong, polylineLength, type Site } from '../world/structures';
+import { LM, SITE_CASTLE, SITE_CITY, SITE_ORC, SITE_VILLAGE, pointAlong, polylineLength, type Site } from '../world/structures';
 import { castleHouse } from '../world/castle';
 import { villageLayout, type House, type Layout, type Spot } from '../world/village';
 import type { Terrain } from '../world/terrain';
@@ -146,6 +146,20 @@ function gossipFor(t: Terrain, site: Site): Gossip[] {
   if (keep) {
     const d = Math.hypot(keep.x - site.x, keep.z - site.z);
     out.push({ text: `${direction(keep.x - site.x, keep.z - site.z)}, ${Math.round(d / 50) * 50} adım ötede ${keep.name} var. ${castleHouse(keep, t.seed).name} askerleri her sabah talim yaparmış.`, id: `s:${keep.id}` });
+  }
+  // The orc capital is a legend everywhere; a nearby camp is talked about too.
+  const cap = t.structures.capital();
+  if (cap) {
+    const [gx, gz, x, z] = cap, d = Math.hypot(x - site.x, z - site.z);
+    const orda = t.structures.site(gx, gz);
+    if (orda) out.push({ text: `${direction(x - site.x, z - site.z)}, kurak topraklarda, ${Math.round(d / 100) * 100} adım ötede ${orda.name} varmış: orkların başkenti. Geceleri savaş davulları duyulurmuş.`, id: `s:${orda.id}` });
+  }
+  const oba = t.structures.sitesNear(site.x - 700, site.z - 700, site.x + 700, site.z + 700, 0)
+    .filter((s) => s.kind === SITE_ORC && !s.capital)
+    .sort((a, b) => Math.hypot(a.x - site.x, a.z - site.z) - Math.hypot(b.x - site.x, b.z - site.z))[0];
+  if (oba) {
+    const d = Math.hypot(oba.x - site.x, oba.z - site.z);
+    out.push({ text: `${direction(oba.x - site.x, oba.z - site.z)}, ${Math.round(d / 50) * 50} adım ötede bir ork obası var: ${oba.name}. Kurtları varmış, yaklaşma.`, id: `s:${oba.id}` });
   }
   // Everyone has heard of the great dragon.
   const lair = t.landmarks.lair();

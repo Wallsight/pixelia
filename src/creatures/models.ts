@@ -610,3 +610,157 @@ export function greatDragon(): Box[] {
   out.push({ s: [0.06, 0.12, 1.4], at: [1.12, 3.4, 0.3], c: '#8a9a7a' }, { s: [0.06, 0.12, 1.0], at: [-1.12, 3.1, -0.6], c: '#8a9a7a' });
   return out;
 }
+
+// ------------------------------------------------------------------ orcs
+// HAIR is the skin (olive, moss and ash greens per orc), TINT the leathers and
+// hides, TINT2 the kilt. Broad, a little hunched, tusks up from a heavy jaw, a
+// red war-paint band across the eyes and a black topknot.
+
+const orcArm = (x: number): V3 => [x, 1.34, 0];
+const orcHead: V3 = [0, 1.38, 0.06];
+const OSK = SL.HAIR;
+const oh = (s: V3, at: V3, c: string, t: number = SL.FIXED): Box => ({ s, at, c, t, part: PART.HEAD, pivot: orcHead });
+
+function orcBody(opts: { knot?: boolean; paint?: string } = {}): Box[] {
+  const legP = (x: number): V3 => [x, 0.72, 0];
+  const out: Box[] = [
+    // Thick legs, wrapped feet.
+    { s: [0.26, 0.72, 0.26], at: [0.15, 0.38, 0], c: '#ffffff', t: OSK, part: PART.LEG_A, pivot: legP(0.15) },
+    { s: [0.26, 0.72, 0.26], at: [-0.15, 0.38, 0], c: '#ffffff', t: OSK, part: PART.LEG_B, pivot: legP(-0.15) },
+    { s: [0.29, 0.14, 0.34], at: [0.15, 0.07, 0.03], c: '#4a3626', t: SL.FIXED, part: PART.LEG_A, pivot: legP(0.15) },
+    { s: [0.29, 0.14, 0.34], at: [-0.15, 0.07, 0.03], c: '#4a3626', t: SL.FIXED, part: PART.LEG_B, pivot: legP(-0.15) },
+    // Kilt and belt with a bone buckle.
+    { s: [0.6, 0.3, 0.36], at: [0, 0.66, 0], c: '#ffffff', t: SL.TINT2 },
+    { s: [0.62, 0.08, 0.38], at: [0, 0.82, 0], c: '#3a2a1c', t: SL.FIXED },
+    { s: [0.1, 0.1, 0.04], at: [0, 0.82, 0.2], c: '#e8dcc0', t: SL.FIXED },
+    // Bare, broad chest; a leather strap across it.
+    { s: [0.66, 0.6, 0.36], at: [0, 1.1, 0.02], c: '#ffffff', t: OSK },
+    { s: [0.12, 0.66, 0.38], at: [0.08, 1.12, 0.02], c: '#5a3e28', t: SL.FIXED },
+    // Hide pauldron on the left shoulder.
+    { s: [0.32, 0.16, 0.4], at: [-0.38, 1.42, 0], c: '#ffffff', t: SL.TINT, part: PART.ARM_L, pivot: orcArm(-0.38) },
+    // Arms: big upper arm, leather bracer, fist.
+    { s: [0.2, 0.46, 0.22], at: [0.42, 1.12, 0], c: '#ffffff', t: OSK, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.2, 0.46, 0.22], at: [-0.42, 1.12, 0], c: '#ffffff', t: OSK, part: PART.ARM_L, pivot: orcArm(-0.42) },
+    { s: [0.22, 0.18, 0.24], at: [0.42, 0.88, 0], c: '#5a3e28', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.22, 0.18, 0.24], at: [-0.42, 0.88, 0], c: '#5a3e28', t: SL.FIXED, part: PART.ARM_L, pivot: orcArm(-0.42) },
+    { s: [0.18, 0.16, 0.2], at: [0.42, 0.74, 0], c: '#ffffff', t: OSK, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.18, 0.16, 0.2], at: [-0.42, 0.74, 0], c: '#ffffff', t: OSK, part: PART.ARM_L, pivot: orcArm(-0.42) },
+    // Head: low skull, heavy brow, wide jaw with tusks, ears out to the sides.
+    oh([0.44, 0.38, 0.42], [0, 1.58, 0.1], '#ffffff', OSK),
+    oh([0.48, 0.1, 0.1], [0, 1.7, 0.3], '#ffffff', OSK),
+    oh([0.46, 0.16, 0.16], [0, 1.42, 0.28], '#ffffff', OSK),
+    oh([0.06, 0.13, 0.05], [0.16, 1.53, 0.38], '#f2e8cc'),
+    oh([0.06, 0.13, 0.05], [-0.16, 1.53, 0.38], '#f2e8cc'),
+    oh([0.16, 0.08, 0.06], [0.28, 1.62, 0.08], '#ffffff', OSK),
+    oh([0.16, 0.08, 0.06], [-0.28, 1.62, 0.08], '#ffffff', OSK),
+    oh([0.07, 0.05, 0.03], [0, 1.53, 0.33], '#2a1e16'),
+    // Paint band and small dark eyes on it.
+    oh([0.46, 0.08, 0.02], [0, 1.62, 0.315], opts.paint ?? '#a8322a'),
+    oh([0.07, 0.05, 0.02], [0.1, 1.62, 0.33], '#1a120c'),
+    oh([0.07, 0.05, 0.02], [-0.1, 1.62, 0.33], '#1a120c'),
+  ];
+  if (opts.knot !== false) out.push(oh([0.12, 0.1, 0.12], [0, 1.81, -0.04], '#1c1612'), oh([0.08, 0.26, 0.08], [0, 1.9, -0.12], '#1c1612'));
+  return out;
+}
+
+/** Orc warrior: a broad cleaver and a round shield of planks with a hide boss. */
+export function orc(): Box[] {
+  return [
+    ...orcBody(),
+    { s: [0.07, 0.07, 0.62], at: [0.42, 0.74, 0.32], c: '#4a3424', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.05, 0.3, 0.38], at: [0.42, 0.82, 0.72], c: '#9aa2aa', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.06, 0.06, 0.38], at: [0.42, 0.98, 0.72], c: '#c8ccd2', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.1, 0.62, 0.62], at: [-0.56, 0.98, 0.08], c: '#7a5a38', t: SL.FIXED, part: PART.ARM_L, pivot: orcArm(-0.42) },
+    { s: [0.12, 0.22, 0.22], at: [-0.6, 0.98, 0.08], c: '#ffffff', t: SL.TINT, part: PART.ARM_L, pivot: orcArm(-0.42) },
+    { s: [0.11, 0.62, 0.06], at: [-0.57, 0.98, 0.08], c: '#3a2a1c', t: SL.FIXED, part: PART.ARM_L, pivot: orcArm(-0.42) },
+  ];
+}
+
+/** Spear thrower: a javelin in hand, a bundle on the back, a bone necklace. */
+export function orcspear(): Box[] {
+  return [
+    ...orcBody({ paint: '#2a2a2e' }),
+    { s: [0.05, 2.0, 0.05], at: [0.5, 1.0, 0.12], c: '#6a4a2a', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.08, 0.24, 0.08], at: [0.5, 2.1, 0.12], c: '#d8d0bc', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.22, 0.2, 0.18], at: [0.12, 1.22, -0.26], c: '#ffffff', t: SL.TINT },
+    { s: [0.04, 1.3, 0.04], at: [0.06, 1.4, -0.28], c: '#6a4a2a', t: SL.FIXED },
+    { s: [0.04, 1.3, 0.04], at: [0.16, 1.45, -0.3], c: '#6a4a2a', t: SL.FIXED },
+    { s: [0.04, 1.3, 0.04], at: [0.11, 1.5, -0.24], c: '#6a4a2a', t: SL.FIXED },
+    { s: [0.5, 0.06, 0.06], at: [0, 1.36, 0.2], c: '#e8dcc0', t: SL.FIXED },
+  ];
+}
+
+/** Shaman: hunched under a hide hood topped by a skull, feathers, a crooked staff with a green light. */
+export function shaman(): Box[] {
+  return [
+    ...orcBody({ knot: false, paint: '#e8e0d0' }),
+    { s: [0.68, 0.7, 0.4], at: [0, 0.62, 0], c: '#ffffff', t: SL.TINT },
+    { s: [0.74, 0.26, 0.44], at: [0, 1.36, -0.02], c: '#ffffff', t: SL.TINT },
+    oh([0.52, 0.3, 0.5], [0, 1.78, 0.02], '#ffffff', SL.TINT),
+    oh([0.3, 0.24, 0.26], [0, 1.98, 0.08], '#e8e0cc'),
+    oh([0.06, 0.06, 0.02], [0.07, 1.98, 0.215], '#1a120c'),
+    oh([0.06, 0.06, 0.02], [-0.07, 1.98, 0.215], '#1a120c'),
+    oh([0.04, 0.34, 0.06], [0.18, 2.12, -0.1], '#c84a2a'),
+    oh([0.04, 0.3, 0.06], [-0.18, 2.1, -0.1], '#3a6aa0'),
+    { s: [0.07, 2.1, 0.07], at: [0.46, 1.0, 0.2], c: '#5a3e22', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.22, 0.2, 0.2], at: [0.46, 2.1, 0.2], c: '#e8e0cc', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.12, 0.12, 0.12], at: [0.46, 2.28, 0.2], c: '#8af06a', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.42, 0.06, 0.06], at: [0, 1.32, 0.22], c: '#e8dcc0', t: SL.FIXED },
+  ];
+}
+
+/** The chief: a horned bone helm, a fur mantle, iron on the shoulders, a great two-handed axe. */
+export function chief(): Box[] {
+  return [
+    ...orcBody({ knot: false }),
+    { s: [0.86, 0.3, 0.52], at: [0, 1.44, -0.02], c: '#ffffff', t: SL.TINT },
+    { s: [0.72, 0.9, 0.08], at: [0, 0.98, -0.22], c: '#ffffff', t: SL.TINT },
+    { s: [0.3, 0.12, 0.36], at: [0.44, 1.56, 0], c: '#5a5e66', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.3, 0.12, 0.36], at: [-0.44, 1.56, 0], c: '#5a5e66', t: SL.FIXED, part: PART.ARM_L, pivot: orcArm(-0.42) },
+    oh([0.5, 0.18, 0.46], [0, 1.82, 0.1], '#e2d8c0'),
+    oh([0.1, 0.1, 0.34], [0.3, 1.86, 0.06], '#e2d8c0'),
+    oh([0.1, 0.1, 0.34], [-0.3, 1.86, 0.06], '#e2d8c0'),
+    oh([0.08, 0.34, 0.08], [0.38, 2.06, 0.02], '#efe6cc'),
+    oh([0.08, 0.34, 0.08], [-0.38, 2.06, 0.02], '#efe6cc'),
+    oh([0.06, 0.16, 0.06], [0.36, 2.28, 0.08], '#efe6cc'),
+    oh([0.06, 0.16, 0.06], [-0.36, 2.28, 0.08], '#efe6cc'),
+    { s: [0.08, 1.9, 0.08], at: [0.42, 1.12, 0.18], c: '#4a3424', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.06, 0.6, 0.46], at: [0.42, 1.9, 0.38], c: '#8a929c', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.06, 0.6, 0.3], at: [0.42, 1.9, -0.06], c: '#8a929c', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.07, 0.62, 0.06], at: [0.42, 1.9, 0.62], c: '#c8ccd2', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.52, 0.08, 0.08], at: [0, 1.36, 0.22], c: '#d8b04a', t: SL.FIXED },
+  ];
+}
+
+/** Camp worker: a leather apron, a hammer, a basket on the back. */
+export function orcwork(): Box[] {
+  return [
+    ...orcBody({ knot: false, paint: '#7a5a3a' }),
+    { s: [0.5, 0.7, 0.06], at: [0, 0.86, 0.22], c: '#ffffff', t: SL.TINT },
+    { s: [0.36, 0.36, 0.26], at: [0, 1.2, -0.32], c: '#a07a48', t: SL.FIXED },
+    { s: [0.38, 0.06, 0.28], at: [0, 1.38, -0.32], c: '#6a4a2a', t: SL.FIXED },
+    { s: [0.06, 0.06, 0.5], at: [0.42, 0.74, 0.26], c: '#5a3e22', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+    { s: [0.16, 0.14, 0.2], at: [0.42, 0.74, 0.54], c: '#5a5e66', t: SL.FIXED, part: PART.ARM_R, pivot: orcArm(0.42) },
+  ];
+}
+
+/** A big camp wolf: shaggy ruff, long muzzle, pale fangs. Tinted per wolf. */
+export function wolf(): Box[] {
+  const fur = '#ffffff', dark = '#3a3430', headP: V3 = [0, 0.86, 0.48];
+  return [
+    { s: [0.46, 0.46, 1.05], at: [0, 0.78, -0.05], c: fur },
+    { s: [0.56, 0.54, 0.4], at: [0, 0.86, 0.32], c: fur },
+    { s: [0.36, 0.1, 0.8], at: [0, 1.04, -0.1], c: dark },
+    ...legs4(0.14, 0.58, 0.16, 0.34, -0.42, fur, 0.58),
+    { s: [0.12, 0.12, 0.6], at: [0, 0.82, -0.82], c: fur, part: PART.TAIL, pivot: [0, 0.9, -0.55] },
+    { s: [0.34, 0.32, 0.34], at: [0, 1.0, 0.66], c: fur, part: PART.HEAD, pivot: headP },
+    { s: [0.2, 0.18, 0.3], at: [0, 0.92, 0.92], c: fur, part: PART.HEAD, pivot: headP },
+    { s: [0.08, 0.07, 0.06], at: [0, 0.96, 1.08], c: '#1a1414', part: PART.HEAD, pivot: headP },
+    { s: [0.04, 0.08, 0.04], at: [0.06, 0.82, 1.02], c: '#f2ead8', part: PART.HEAD, pivot: headP },
+    { s: [0.04, 0.08, 0.04], at: [-0.06, 0.82, 1.02], c: '#f2ead8', part: PART.HEAD, pivot: headP },
+    { s: [0.08, 0.16, 0.06], at: [0.12, 1.22, 0.6], c: fur, part: PART.HEAD, pivot: headP },
+    { s: [0.08, 0.16, 0.06], at: [-0.12, 1.22, 0.6], c: fur, part: PART.HEAD, pivot: headP },
+    { s: [0.05, 0.04, 0.02], at: [0.1, 1.06, 0.835], c: '#f0c040', part: PART.HEAD, pivot: headP },
+    { s: [0.05, 0.04, 0.02], at: [-0.1, 1.06, 0.835], c: '#f0c040', part: PART.HEAD, pivot: headP },
+  ];
+}

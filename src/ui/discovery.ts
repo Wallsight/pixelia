@@ -3,7 +3,7 @@
 // heard about from villagers (shown as "?" on the map). Saved per world seed in
 // localStorage; everything still works if storage is unavailable.
 
-import { LM, SITE_CASTLE, SITE_CITY, SITE_VILLAGE, type Landmark, type Site } from '../world/structures';
+import { LM, SITE_CASTLE, SITE_CITY, SITE_ORC, SITE_VILLAGE, type Landmark, type Site } from '../world/structures';
 import type { Terrain } from '../world/terrain';
 
 export const FOG_CELL = 32;
@@ -135,7 +135,7 @@ export class Discovery {
   private checkPlaces(px: number, pz: number): void {
     const st = this.terrain.structures;
     for (const s of st.sitesNear(px - 100, pz - 100, px + 100, pz + 100, 0)) {
-      const r = s.kind === SITE_CITY ? 90 : s.kind === SITE_VILLAGE ? 45 : s.kind === SITE_CASTLE ? 35 : 12;
+      const r = s.kind === SITE_CITY ? 90 : s.kind === SITE_VILLAGE ? 45 : s.kind === SITE_CASTLE ? 35 : s.kind === SITE_ORC ? (s.capital ? 60 : 32) : 12;
       if (Math.hypot(s.x - px, s.z - pz) < r) this.discover(`s:${s.id}`, siteTitle(s));
     }
     for (const lm of this.terrain.landmarks.near(px - 60, pz - 60, px + 60, pz + 60, 0)) {

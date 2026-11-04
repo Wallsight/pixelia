@@ -154,6 +154,17 @@ export class FireFx {
     if (Math.random() < dt * 2.5) this.smoke.emit(x, y + 0.9, z, 0, 0.8, 0, 3, 0.3, 0.7);
   }
 
+  /** A camp bonfire `w` blocks across: tall flames, rising embers, a column of smoke. */
+  bonfire(x: number, y: number, z: number, dt: number, w = 1): void {
+    const k = w * w;
+    for (let n = Math.floor(dt * 36 * k + Math.random()); n > 0; n--) {
+      const r = Math.random() * w * 0.45, a = Math.random() * Math.PI * 2, core = 1 - r / (w * 0.45 + 1e-3);
+      this.fire.emit(x + Math.cos(a) * r, y + Math.random() * 0.2, z + Math.sin(a) * r, (Math.random() - 0.5) * 0.4, 1.8 + core * 1.6 + Math.random() * 0.6, (Math.random() - 0.5) * 0.4, 0.55 + core * 0.4, 0.55 + core * 0.45, 0.05);
+    }
+    if (Math.random() < dt * 6 * w) this.spark(x + (Math.random() - 0.5) * w * 0.6, y + 0.8 + Math.random() * w * 0.6, z + (Math.random() - 0.5) * w * 0.6, 1, 0.6, 0.2, 1, 1.4);
+    if (Math.random() < dt * 1.4 * w) this.smoke.emit(x + (Math.random() - 0.5) * 0.5, y + 1.2 + w * 0.6, z + (Math.random() - 0.5) * 0.5, 0, 1.0, 0, 3.5, 0.3 * w, 0.7);
+  }
+
   /** A hand-held torch: a tight little flame with a wisp of smoke. */
   torch(x: number, y: number, z: number, dt: number): void {
     if (Math.random() < dt * 30) this.fire.emit(x + (Math.random() - 0.5) * 0.1, y, z + (Math.random() - 0.5) * 0.1, 0, 1.1, 0, 0.35, 0.13, 0.06);

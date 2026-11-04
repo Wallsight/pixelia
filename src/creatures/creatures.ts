@@ -7,7 +7,6 @@ import { createCreatureMaterial, type EnvUniforms } from '../render/materials';
 import { LAYER_CREATURE_CASTER } from '../render/shadows';
 import { B, COLLIDES, HEIGHT, HEIGHT8, KIND, KIND_LEAVES, KIND_PLANT, SEA, isLiquid } from '../world/blocks';
 import { BIOME } from '../world/biomes';
-import { SITE_CASTLE } from '../world/structures';
 import type { Terrain } from '../world/terrain';
 import type { World } from '../world/world';
 import { buildRig, type Box } from './rig';
@@ -18,11 +17,12 @@ import { hash01 } from '../engine/noise';
 import { NightDirector, type Fighter, type FighterKind, type NightHost, type NightSound } from './night';
 import { GREAT_DRAGON, GREAT_SCALE, WyrmDirector, type WyrmHost } from './wyrm';
 import { WarDirector, type WarHost } from './war';
+import { OrcDirector } from './orcs';
 
 const TAU = Math.PI * 2;
 const DESPAWN = 104;
 
-type Habitat = 'ground' | 'air' | 'water' | 'flutter' | 'dragon' | 'npc' | 'monster' | 'hero' | 'wyrm';
+type Habitat = 'ground' | 'air' | 'water' | 'flutter' | 'dragon' | 'npc' | 'monster' | 'hero' | 'wyrm' | 'orc';
 
 interface SpeciesDef {
   name: string;
@@ -70,6 +70,12 @@ const SPECIES: SpeciesDef[] = [
     name, model, max, habitat: ['warrior', 'archer', 'mage', 'soldier', 'bowman', 'captain'].includes(name) ? 'hero' : 'monster', biomes: [], group: [1, 1], speed: 1,
     scale: name === 'demon' ? [1.15, 1.3] : name === 'spider' ? [0.9, 1.2] : name === 'troll' ? [1, 1.15] : [0.95, 1.05],
     tints, shadow: name !== 'ghost' && name !== 'wisp', time: 0, translucent: name === 'ghost',
+  })),
+  // Orc camps and their wolves (spawned by the orc director).
+  ...([['orc', M.orc, 26, [1.08, 1.16]], ['orcspear', M.orcspear, 12, [1.04, 1.12]], ['shaman', M.shaman, 3, [0.98, 1.04]],
+    ['chief', M.chief, 1, [1.3, 1.3]], ['orcwork', M.orcwork, 12, [0.96, 1.04]], ['wolf', M.wolf, 8, [1.0, 1.15]],
+  ] as Array<[FighterKind, () => Box[], number, [number, number]]>).map(([name, model, max, scale]): SpeciesDef => ({
+    name, model, max, habitat: 'orc', biomes: [], group: [1, 1], speed: 1, scale, tints: ['#ffffff'], shadow: true, time: 0,
   })),
 ];
 
@@ -151,6 +157,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
   readonly nightDir: NightDirector;
   readonly wyrm: WyrmDirector;
   readonly war: WarDirector;
+  readonly orcs: OrcDirector;
   readonly fire = new FireFx();
   private species: SpeciesRuntime[] = [];
   private spawnTimer = 0;
@@ -204,6 +211,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
     this.nightDir = new NightDirector(terrain, this);
     this.wyrm = new WyrmDirector(terrain, this);
     this.war = new WarDirector(terrain, this, this.nightDir, env, shadows);
+    this.orcs = new OrcDirector(terrain, this, this.nightDir);
     this.group.add(this.npcs.group, this.fire.group, this.nightDir.group, this.wyrm.group, this.war.group);
   }
 
@@ -232,6 +240,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
     this.npcs.update(dt, px, pz, night, cam);
     this.nightDir.update(dt, px, pz, night);
     this.war.update(dt, px, pz, night);
+    this.orcs.update(dt, px, pz, night);
     this.wyrm.night = night;
     this.wyrm.update(dt, px, cam.y, pz);
     this.spawnTimer -= dt;
@@ -244,7 +253,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
       for (let i = list.length - 1; i >= 0; i--) {
         const c = list[i];
         const h = rt.def.habitat;
-        const far = Math.hypot(c.x - px, c.z - pz) > (h === 'wyrm' ? 340 : h === 'dragon' ? 260 : h === 'npc' ? 240 : h === 'hero' ? 200 : h === 'monster' ? 120 : DESPAWN);
+        const far = Math.hypot(c.x - px, c.z - pz) > (h === 'wyrm' ? 340 : h === 'dragon' ? 260 : h === 'npc' ? 240 : h === 'hero' || h === 'orc' ? 200 : h === 'monster' ? 120 : DESPAWN);
         const wrongTime = (rt.def.time === -1 && night < 0.3) || (rt.def.time === 1 && night > 0.75);
         const alive = c.dying > 0 ? (c.fighter ? this.nightDir.stepDying(c, dt) : this.stepDying(c, dt))
           : !(far || (wrongTime && Math.random() < dt * 0.2) || !this.step(rt.def, c, dt, night));
@@ -348,7 +357,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
       const idx = (this.spawnCursor + k) % this.species.length;
       const rt = this.species[idx];
       const def = rt.def;
-      if (rt.list.length >= def.max || def.habitat === 'npc' || def.habitat === 'monster' || def.habitat === 'hero' || def.habitat === 'wyrm') continue;
+      if (rt.list.length >= def.max || def.habitat === 'npc' || def.habitat === 'monster' || def.habitat === 'hero' || def.habitat === 'wyrm' || def.habitat === 'orc') continue;
       if ((def.time === 1 && night > 0.6) || (def.time === -1 && night < 0.5)) continue;
       this.spawnCursor = idx + 1;
       if (def.habitat === 'dragon') { this.spawnDragon(rt, px, pz); return; }
@@ -360,9 +369,8 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
       // Wild animals keep out of the city.
       const city = this.terrain.city;
       if (city && def.habitat === 'ground' && Math.hypot(x - city.x, z - city.z) < 110) return;
-      // ...and out of garrisoned castles (and off their walls).
-      if (def.habitat === 'ground' && this.terrain.structures.sitesNear(x - 30, z - 30, x + 30, z + 30, 0)
-        .some((c) => c.kind === SITE_CASTLE && c.held && Math.max(Math.abs(c.x - x), Math.abs(c.z - z)) < 30)) return;
+      // ...and out of garrisoned castles (and off their walls) and orc camps.
+      if (def.habitat === 'ground' && this.terrain.structures.guarded(x, z, 3)) return;
       const n = Math.min(def.max - rt.list.length, Math.round(rand(def.group[0], def.group[1])));
       const tint = new THREE.Color(def.tints[Math.floor(Math.random() * def.tints.length)]);
       // Snowy hares.
@@ -446,6 +454,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
       case 'monster': return this.nightDir.step(c, dt);
       case 'hero': return c.fighter?.garrison ? this.war.step(c, dt) : this.nightDir.step(c, dt);
       case 'wyrm': return this.wyrm.step(c, dt);
+      case 'orc': return this.orcs.step(c, dt);
     }
   }
 

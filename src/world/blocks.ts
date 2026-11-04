@@ -22,6 +22,7 @@ export const TILE_NAMES = [
   'roof_red', 'roof_slate', 'thatch', 'plaster', 'window_wood', 'door_low', 'door_top', 'farmland',
   'wheat', 'carrots', 'hay_top', 'hay_side', 'cloth_red', 'cloth_yellow', 'crate',
   'banner_red', 'banner_blue', 'banner_green', 'banner_black', 'banner_purple',
+  'hide', 'skull', 'war_banner',
 ] as const;
 
 export type TileName = (typeof TILE_NAMES)[number];
@@ -163,6 +164,10 @@ export const B = {
   BANNER_GREEN: def('banner_green', KIND_SOLID, 'banner_green'),
   BANNER_BLACK: def('banner_black', KIND_SOLID, 'banner_black'),
   BANNER_PURPLE: def('banner_purple', KIND_SOLID, 'banner_purple'),
+  // Orc camps.
+  HIDE: def('hide', KIND_SOLID, 'hide'),
+  SKULL: def('skull', KIND_SOLID, 'bone', 'skull', 'bone'),
+  WAR_BANNER: def('war_banner', KIND_SOLID, 'war_banner'),
 } as const;
 for (const b of [B.MAGMA, B.LAVA, B.GLYPH, B.KELP, B.EMBER_FLOWER, B.SABER_BLADE]) EMISSIVE[b] = 1;
 WATERLOGGED[B.KELP] = 1;

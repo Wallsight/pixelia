@@ -326,6 +326,18 @@ function frame(): void {
         (window as unknown as Record<string, unknown>).__war = () => creatures.war.info();
         (window as unknown as Record<string, unknown>).__castle = () => creatures.war.nearestCastle(player.position.x, player.position.z);
         (window as unknown as Record<string, unknown>).__siege = () => creatures.war.devSiege();
+        (window as unknown as Record<string, unknown>).__orcs = () => creatures.orcs.info();
+        (window as unknown as Record<string, unknown>).__orda = (capital = true) => creatures.orcs.nearest(player.position.x, player.position.z, capital);
+        (window as unknown as Record<string, unknown>).__lookOrc = (job: string, dist = 5, up = 1.6) => {
+          const c = creatures.orcs.find(job, player.position.x, player.position.z);
+          if (!c) return 'none';
+          const a = c.yaw;
+          player.flying = true;
+          player.position.set(c.x + Math.sin(a) * dist, c.y + up, c.z + Math.cos(a) * dist);
+          player.yaw = a;
+          player.pitch = -Math.atan2(up - 1, dist) * 0.8;
+          return [Math.round(c.x), Math.round(c.y), Math.round(c.z)];
+        };
         // Dev: put the camera somewhere (degrees; fly keeps it there).
         (window as unknown as Record<string, unknown>).__cam = (x: number, y: number, z: number, yaw = 0, pitch = 0, fly = true) => {
           player.position.set(x, y, z);

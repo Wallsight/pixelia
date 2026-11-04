@@ -15,6 +15,12 @@ export const SITE_CROSSROAD = 2;
 export const SITE_VILLAGE = 3;
 /** The one city of the world, near the origin; the player starts there. */
 export const SITE_CITY = 4;
+/** An orc camp in the dry lands (one of them, Site.capital, is the orc capital). */
+export const SITE_ORC = 5;
+
+const ORC_A = ['Gro', 'Dra', 'Ukh', 'Mog', 'Zha', 'Rag', 'Bur', 'Kro', 'Gha', 'Nak', 'Ozg', 'Thru', 'Vrak', 'Skar'];
+const ORC_B = ['kaz', 'rum', 'dak', 'gul', 'mok', 'zar', 'ruk', 'naz', 'thak', 'brak', 'duk', 'hesh'];
+const ARID: number[] = [BIOME.DESERT, BIOME.BADLANDS];
 
 const VILLAGE_BIOMES: number[] = [BIOME.PLAINS, BIOME.FOREST, BIOME.BIRCH_FOREST, BIOME.TAIGA, BIOME.TUNDRA, BIOME.DESERT, BIOME.BADLANDS];
 
@@ -31,6 +37,8 @@ export interface Site {
   h: number;
   /** Castles outside the gloom: kept up and garrisoned by a noble house (else a ruin). */
   held?: boolean;
+  /** The orc capital (SITE_ORC only). */
+  capital?: boolean;
 }
 
 export interface Road {
@@ -51,6 +59,7 @@ export class StructureMap {
   private roads = new Map<string, Road | null>();
   private nMeander: Simplex;
   private cityCell: [number, number] | null | undefined;
+  private capitalCell: [number, number, number, number] | null | undefined;
 
   constructor(private terrain: Terrain) {
     this.nMeander = new Simplex((terrain.seed ^ 0x51ed) >>> 0);
@@ -71,6 +80,15 @@ export class StructureMap {
   }
 
   /** Candidate centre of a cell (before choosing its kind). */
+  /** A floating island hangs over the ground within r (it would roof over a camp). */
+  private underIsle(x: number, z: number, r: number): boolean {
+    for (const rr of [0, r * 0.5, r]) for (let k = 0; k < (rr ? 8 : 1); k++) {
+      const a = (k / 8) * Math.PI * 2;
+      if (this.terrain.sample(x + Math.cos(a) * rr, z + Math.sin(a) * rr).isle > 0) return true;
+    }
+    return false;
+  }
+
   private candidate(gx: number, gz: number, attempt: number): [number, number] {
     const seed = this.terrain.seed;
     return [
@@ -85,6 +103,43 @@ export class StructureMap {
     const c = this.terrain.city;
     this.cityCell = c ? [Math.floor(c.x / SITE_CELL), Math.floor(c.z / SITE_CELL)] : null;
     return this.cityCell;
+  }
+
+  /**
+   * The orc capital: the first wide, level stretch of desert or badlands found
+   * ring by ring out from the city (2-9 cells away). [gx, gz, x, z] or null.
+   */
+  capital(): [number, number, number, number] | null {
+    if (this.capitalCell !== undefined) return this.capitalCell;
+    this.capitalCell = null;
+    const cc = this.city() ?? [0, 0];
+    const seed = this.terrain.seed;
+    for (let ring = 2; ring <= 9 && !this.capitalCell; ring++) {
+      const cells: Array<[number, number]> = [];
+      for (let dz = -ring; dz <= ring; dz++) for (let dx = -ring; dx <= ring; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) === ring) cells.push([cc[0] + dx, cc[1] + dz]);
+      }
+      cells.sort((a, b) => hash01(a[0], 950, a[1], seed) - hash01(b[0], 950, b[1], seed));
+      for (const [gx, gz] of cells) {
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const [x, z] = this.candidate(gx, gz, attempt);
+          const s = this.terrain.sample(x, z);
+          if (!ARID.includes(s.biome) || s.h < SEA + 2 || s.mesa > 0.3 || s.river > 0.05 || s.crag > 0.15 || s.mount > 0.3 || this.underIsle(x, z, 46)) continue;
+          if (!this.flatAround(x, z, 52, 10)) continue;
+          this.capitalCell = [gx, gz, x, z];
+          break;
+        }
+        if (this.capitalCell) break;
+      }
+    }
+    return this.capitalCell;
+  }
+
+  /** Inside (or on the walls of, or within pad of) a garrisoned castle or an orc camp: wild things keep out. */
+  guarded(x: number, z: number, pad = 0): boolean {
+    return this.sitesNear(x - 60, z - 60, x + 60, z + 60, 0).some((c) =>
+      (c.kind === SITE_CASTLE && c.held && Math.max(Math.abs(c.x - x), Math.abs(c.z - z)) < 27 + pad)
+      || (c.kind === SITE_ORC && Math.hypot(c.x - x, c.z - z) < (c.capital ? 42 : 20) + pad));
   }
 
   /** The site of grid cell (gx, gz), or null if the cell has none (ocean, etc.). */
@@ -102,6 +157,13 @@ export class StructureMap {
       this.sites.set(id, result);
       return result;
     }
+    const cap = this.capital();
+    if (cap && cap[0] === gx && cap[1] === gz) {
+      const [, , x, z] = cap;
+      result = { id, gx, gz, x, z, kind: SITE_ORC, capital: true, name: `${this.orcName(gx, gz)} Ordası`, h: this.terrain.sample(x, z).h };
+      this.sites.set(id, result);
+      return result;
+    }
     for (let attempt = 0; attempt < 4 && !result; attempt++) {
       const [x, z] = this.candidate(gx, gz, attempt);
       const s = this.terrain.sample(x, z);
@@ -111,12 +173,20 @@ export class StructureMap {
       const gloomy = s.biome === BIOME.GLOOM;
       const castle = gloomy ? r < 0.85 : r < 0.18;
       let kind = castle ? SITE_CASTLE : SITE_CROSSROAD;
-      if (!castle && r < 0.62 && VILLAGE_BIOMES.includes(s.biome) && this.flatAround(x, z, 34, 9)) kind = SITE_VILLAGE;
-      result = { id, gx, gz, x, z, kind, name: this.makeName(gx, gz, kind), h: s.h };
+      // The dry lands belong mostly to the orcs.
+      if (!castle && r < 0.7 && ARID.includes(s.biome) && this.flatAround(x, z, 26, 10) && !this.underIsle(x, z, 24)) kind = SITE_ORC;
+      else if (!castle && r < 0.62 && VILLAGE_BIOMES.includes(s.biome) && this.flatAround(x, z, 34, 9)) kind = SITE_VILLAGE;
+      result = { id, gx, gz, x, z, kind, name: kind === SITE_ORC ? `${this.orcName(gx, gz)} Obası` : this.makeName(gx, gz, kind), h: s.h };
       if (castle && !gloomy && hash01(gx, 503, gz, seed) < 0.8) result.held = true;
     }
     this.sites.set(id, result);
     return result;
+  }
+
+  /** Orcish place names (invented). */
+  private orcName(gx: number, gz: number): string {
+    const seed = this.terrain.seed;
+    return ORC_A[Math.floor(hash01(gx, 610, gz, seed) * ORC_A.length)] + ORC_B[Math.floor(hash01(gx, 611, gz, seed) * ORC_B.length)];
   }
 
   private makeName(gx: number, gz: number, kind: number): string {

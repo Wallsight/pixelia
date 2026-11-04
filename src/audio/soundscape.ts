@@ -79,6 +79,7 @@ const NIGHT_SOUNDS: Record<string, [number, number, number, (e: AudioEngine, o: 
   twang: [3, 40, 0.6, X.twang], zap: [4, 50, 0.6, X.zap], poof: [4, 45, 0.7, X.poof], gurgle: [3, 35, 0.6, X.gurgle],
   heal: [4, 40, 0.6, (e, o, t) => X.chime(e, o, t, [880, 1175, 1568], 0.08, 0.12)],
   horn: [25, 450, 1, X.horn], boom: [10, 170, 1, X.gateBoom],
+  drum: [14, 220, 0.8, X.warDrum], howl: [12, 200, 0.8, X.howl], anvil: [4, 60, 0.6, X.anvil],
 };
 
 export class Soundscape {
@@ -197,6 +198,12 @@ export class Soundscape {
       const cap = c.fighter.kind === 'captain', k = (c.seed % 1000) / 1000;
       at[1] = c.y + 1.6 * c.scale;
       this.play(at, 'voice', cap ? 6 : 3, 0.1, cap ? 55 : 32, cap ? 1 : 0.9, (o, t) => X.babble(e, o, t, text, cap ? 92 : 100 + k * 40));
+    } else if (ev === 'say' && c.fighter?.orc && text) {
+      // Orcs rumble; the chief's bellow carries across the camp.
+      const chief = c.fighter.kind === 'chief', k = (c.seed % 1000) / 1000;
+      const f0 = chief ? 64 : c.fighter.kind === 'shaman' ? 120 + k * 20 : 74 + k * 26;
+      at[1] = c.y + 1.6 * c.scale;
+      this.play(at, 'voice', chief ? 8 : 3, 0.12, chief ? 80 : 34, chief ? 1 : 0.9, (o, t) => X.babble(e, o, t, text, f0));
     } else if (NIGHT_SOUNDS[ev]) {
       at[1] = c.y + 1.2 * c.scale;
       const [ref, maxD, vol, fn] = NIGHT_SOUNDS[ev];

@@ -1,7 +1,7 @@
 // Full-screen world map (M): terrain tiles from a worker, roads / sites / player drawn on top.
 
 import type { MapRequest, MapTile } from '../world/map-worker';
-import { LM, SITE_CASTLE, SITE_CITY, SITE_VILLAGE, type Site } from '../world/structures';
+import { LM, SITE_CASTLE, SITE_CITY, SITE_ORC, SITE_VILLAGE, type Site } from '../world/structures';
 import type { Terrain } from '../world/terrain';
 import { castleHouse } from '../world/castle';
 import { FOG_CELL, LANDMARK_NAMES, landmarkId, siteId, type Discovery } from './discovery';
@@ -258,6 +258,38 @@ export class WorldMap {
         g.fillStyle = '#2b1d33';
         g.fillText(s.name, X + dpr, ly + dpr);
         g.fillStyle = city ? '#ffe7a8' : '#fff6e2';
+        g.fillText(s.name, X, ly);
+        g.font = prev;
+      }
+      return;
+    }
+    if (s.kind === SITE_ORC) {
+      // Hide tents round a fire; the orda gets three and a war banner.
+      const cap = !!s.capital, k = cap ? 1.4 : 1;
+      const tents: Array<[number, number]> = cap ? [[-2, 0.8], [0, -0.6], [2, 0.8]] : [[-1, 0.4], [1, 0.4]];
+      g.lineWidth = 1.2 * dpr;
+      g.strokeStyle = '#2b1d33';
+      for (const [hx, hy] of tents) {
+        const X0 = X + hx * u * k, Y0 = Y + hy * u * k;
+        g.fillStyle = '#a8865c';
+        g.beginPath();
+        g.moveTo(X0 - u * 1.1, Y0 + u * 0.8); g.lineTo(X0, Y0 - u * 1.2); g.lineTo(X0 + u * 1.1, Y0 + u * 0.8);
+        g.closePath(); g.fill(); g.stroke();
+      }
+      if (cap) {
+        g.fillStyle = '#2b1d33';
+        g.fillRect(X - 0.15 * u, Y - 5.6 * u, 0.3 * u, 3.4 * u);
+        g.fillStyle = '#8a2420';
+        g.fillRect(X + 0.15 * u, Y - 5.6 * u, 1.8 * u, 1.3 * u);
+        g.strokeRect(X + 0.15 * u, Y - 5.6 * u, 1.8 * u, 1.3 * u);
+      }
+      if (step <= 8 || cap) {
+        const prev = g.font;
+        if (cap) g.font = `bold ${Math.round(14 * dpr)}px "Cascadia Mono", Consolas, monospace`;
+        const ly = Y - (cap ? 7 : 4) * u;
+        g.fillStyle = '#2b1d33';
+        g.fillText(s.name, X + dpr, ly + dpr);
+        g.fillStyle = cap ? '#ffb39a' : '#f2d8c0';
         g.fillText(s.name, X, ly);
         g.font = prev;
       }

@@ -6,7 +6,8 @@ import { B, CHUNK, HEIGHT, HEIGHT8, KIND, KIND_AIR, KIND_PLANT, KIND_LEAVES, KIN
 import { RW } from './biomes';
 import { buildCastle, C_AIR, C_FILL, C_KEEP, C_SURFACE, type CastlePlan } from './castle';
 import { buildVillagePlan, type VillagePlan } from './village';
-import { SITE_CASTLE, SITE_CITY, SITE_CROSSROAD, SITE_VILLAGE, pointAlong, polylineLength, type Landmark, type Road, type Site } from './structures';
+import { SITE_CASTLE, SITE_CITY, SITE_CROSSROAD, SITE_ORC, SITE_VILLAGE, pointAlong, polylineLength, type Landmark, type Road, type Site } from './structures';
+import { buildOrcPlan, type OrcPlan } from './orcs';
 import { buildLandmark, LANDMARK_REACH, type LandmarkPlan } from './landmarks';
 import type { Terrain } from './terrain';
 
@@ -48,6 +49,17 @@ function villageFor(t: Terrain, site: Site): VillagePlan {
     plan = buildVillagePlan(t, site);
     if (villageCache.size > 12) villageCache.delete(villageCache.keys().next().value!);
     villageCache.set(key, plan);
+  }
+  return plan;
+}
+const orcCache = new Map<string, OrcPlan>();
+function orcFor(t: Terrain, site: Site): OrcPlan {
+  const key = `${t.seed}:${site.id}`;
+  let plan = orcCache.get(key);
+  if (!plan) {
+    plan = buildOrcPlan(t, site);
+    if (orcCache.size > 8) orcCache.delete(orcCache.keys().next().value!);
+    orcCache.set(key, plan);
   }
   return plan;
 }
@@ -130,6 +142,7 @@ export function placeStructures(t: Terrain, blocks: Uint8Array, x0: number, z0: 
   // --- castles and landmarks
   for (const c of castles) stampCastle(c, blocks, x0, z0, mask);
   for (const s of sites) if (isSettlement(s)) stampCastle(villageFor(t, s), blocks, x0, z0, mask);
+  for (const s of sites) if (s.kind === SITE_ORC) stampCastle(orcFor(t, s), blocks, x0, z0, mask);
   for (const lm of t.landmarks.near(x0, z0, x1, z1, LANDMARK_REACH)) stampCastle(landmarkFor(t, lm), blocks, x0, z0, mask);
 
   // --- crossroads: a stone lantern post beside the junction
@@ -268,6 +281,10 @@ export function collectSigns(t: Terrain, blocks: Uint8Array, cx: number, cz: num
   for (const s of t.structures.sitesNear(ix0, iz0, ix0 + CHUNK, iz0 + CHUNK, SETTLEMENT_REACH)) {
     if (!isSettlement(s)) continue;
     for (const rec of villageFor(t, s).texts) if (inside(Math.floor(rec.x), Math.floor(rec.z))) out.push(rec);
+  }
+  for (const s of t.structures.sitesNear(ix0, iz0, ix0 + CHUNK, iz0 + CHUNK, SETTLEMENT_REACH)) {
+    if (s.kind !== SITE_ORC) continue;
+    for (const rec of orcFor(t, s).texts) if (inside(Math.floor(rec.x), Math.floor(rec.z))) out.push(rec);
   }
   // Landmark texts (tombstones, plaques, their own signposts).
   for (const lm of t.landmarks.near(ix0, iz0, ix0 + CHUNK, iz0 + CHUNK, LANDMARK_REACH)) {
