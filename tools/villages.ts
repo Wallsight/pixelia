@@ -16,5 +16,5 @@ for (const s of sites) {
   const t2 = performance.now();
   const kinds: Record<string, number> = {};
   for (const h of L.houses) kinds[h.kind] = (kinds[h.kind] ?? 0) + 1;
-  console.log(`${s.kind === SITE_CITY ? 'ŞEHİR' : 'köy  '} ${s.name.padEnd(20)} ${s.x},${s.z} h=${s.h.toFixed(0)} style=${L.style} streets=${L.streets.length} houses=${L.houses.length} ${JSON.stringify(kinds)} fields=${L.fields.length} stalls=${L.stalls.length} lamps=${L.lamps.length} texts=${plan.texts.length} layout=${(t1 - t0).toFixed(0)}ms plan=${(t2 - t1).toFixed(0)}ms`);
+  console.log(`${s.kind === SITE_CITY ? 'ŞEHİR' : 'köy  '} ${s.name.padEnd(20)} ${s.x},${s.z} h=${s.h.toFixed(0)} style=${L.style} streets=${L.streets.length} houses=${L.houses.length} ${JSON.stringify(kinds)} fields=${L.fields.length} stalls=${L.stalls.length} lamps=${L.lamps.length} towers=${L.towers.length} texts=${plan.texts.length} layout=${(t1 - t0).toFixed(0)}ms plan=${(t2 - t1).toFixed(0)}ms`);
 }

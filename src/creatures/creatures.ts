@@ -18,6 +18,7 @@ import { NightDirector, type Fighter, type FighterKind, type NightHost, type Nig
 import { GREAT_DRAGON, GREAT_SCALE, WyrmDirector, type WyrmHost } from './wyrm';
 import { WarDirector, type WarHost } from './war';
 import { OrcDirector } from './orcs';
+import { WatchDirector } from './watch';
 
 const TAU = Math.PI * 2;
 const DESPAWN = 104;
@@ -55,7 +56,7 @@ const SPECIES: SpeciesDef[] = [
   { name: GREAT_DRAGON, model: M.greatDragon, max: 1, habitat: 'wyrm', biomes: [], group: [1, 1], speed: 0, scale: [GREAT_SCALE, GREAT_SCALE], tints: ['#ffffff'], shadow: true, time: 0 },
   // People (spawned by the NPC director, not by biome).
   ...([['villager', M.villager, 40], ['farmer', M.farmer, 16], ['merchant', M.merchant, 20], ['elder', M.elder, 12],
-    ['guard', M.guard, 10], ['kid', M.kid, 20], ['traveler', M.traveler, 6], ['bard', M.bard, 2], ['crier', M.crier, 2]] as Array<[Role, () => Box[], number]>).map(([name, model, max]): SpeciesDef => ({
+    ['guard', M.guard, 14], ['kid', M.kid, 20], ['traveler', M.traveler, 6], ['bard', M.bard, 2], ['crier', M.crier, 2]] as Array<[Role, () => Box[], number]>).map(([name, model, max]): SpeciesDef => ({
     name, model, max, habitat: 'npc', biomes: [], group: [1, 1], speed: 1.3, scale: [1, 1], tints: ['#ffffff'], shadow: true, time: 0,
   })),
   // Night monsters and adventurers (spawned by the night director).
@@ -65,7 +66,7 @@ const SPECIES: SpeciesDef[] = [
     ['deepone', M.deepone, 10, ['#5a8a7a', '#4a7a6a', '#6a8a6a', '#5a7a8a']],
     ['warrior', M.warrior, 3, ['#ffffff']], ['archer', M.archer, 3, ['#ffffff']], ['mage', M.mage, 3, ['#ffffff']],
     // Castle garrisons (spawned by the war director).
-    ['soldier', M.soldier, 24, ['#ffffff']], ['bowman', M.bowman, 10, ['#ffffff']], ['captain', M.captain, 3, ['#ffffff']],
+    ['soldier', M.soldier, 24, ['#ffffff']], ['bowman', M.bowman, 14, ['#ffffff']], ['captain', M.captain, 3, ['#ffffff']],
   ] as Array<[FighterKind, () => Box[], number, string[]]>).map(([name, model, max, tints]): SpeciesDef => ({
     name, model, max, habitat: ['warrior', 'archer', 'mage', 'soldier', 'bowman', 'captain'].includes(name) ? 'hero' : 'monster', biomes: [], group: [1, 1], speed: 1,
     scale: name === 'demon' ? [1.15, 1.3] : name === 'spider' ? [0.9, 1.2] : name === 'troll' ? [1, 1.15] : [0.95, 1.05],
@@ -133,7 +134,7 @@ interface SpeciesRuntime {
 /** Dragons circle and land no closer than this to the city centre. */
 const CITY_AIRSPACE = 185;
 
-const enum S { IDLE, WALK, GRAZE, CIRCLE, DESCEND, PERCH, CLIMB, LEAP, SLEEP, HUNT, BREATHE, FEED, FLEE }
+const enum S { IDLE, WALK, GRAZE, CIRCLE, DESCEND, PERCH, CLIMB, LEAP, SLEEP, HUNT, BREATHE, FEED, FLEE, RAID, ESCAPE }
 
 /** Things the soundscape wants to hear about. */
 export type SoundEvent = 'roar' | 'kill' | 'say' | 'leap' | 'splash';
@@ -158,6 +159,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
   readonly wyrm: WyrmDirector;
   readonly war: WarDirector;
   readonly orcs: OrcDirector;
+  readonly watch: WatchDirector;
   readonly fire = new FireFx();
   private species: SpeciesRuntime[] = [];
   private spawnTimer = 0;
@@ -212,6 +214,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
     this.wyrm = new WyrmDirector(terrain, this);
     this.war = new WarDirector(terrain, this, this.nightDir, env, shadows);
     this.orcs = new OrcDirector(terrain, this, this.nightDir);
+    this.watch = new WatchDirector(terrain, this, this.nightDir);
     this.group.add(this.npcs.group, this.fire.group, this.nightDir.group, this.wyrm.group, this.war.group);
   }
 
@@ -241,6 +244,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
     this.nightDir.update(dt, px, pz, night);
     this.war.update(dt, px, pz, night);
     this.orcs.update(dt, px, pz, night);
+    this.watch.update(dt, px, pz, night);
     this.wyrm.night = night;
     this.wyrm.update(dt, px, cam.y, pz);
     this.spawnTimer -= dt;
@@ -452,7 +456,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
       case 'dragon': return this.stepDragon(def, c, dt);
       case 'npc': return this.npcs.step(c, dt, night);
       case 'monster': return this.nightDir.step(c, dt);
-      case 'hero': return c.fighter?.garrison ? this.war.step(c, dt) : this.nightDir.step(c, dt);
+      case 'hero': return c.fighter?.garrison ? this.war.step(c, dt) : c.fighter?.watch ? this.watch.step(c, dt) : this.nightDir.step(c, dt);
       case 'wyrm': return this.wyrm.step(c, dt);
       case 'orc': return this.orcs.step(c, dt);
     }
@@ -749,6 +753,33 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
       c.tail = Math.sin(t * 0.8) * 0.3;
       c.walkAmp = 0;
       if (c.timer <= 0) { c.state = S.CLIMB; c.timer = 5; c.flap = 0; }
+    } else if (c.state === S.RAID) {
+      // Harrying a watch tower: circle it close, now and then hang in the air and breathe fire at the top.
+      const d = Math.hypot(c.x - c.tx, c.z - c.tz);
+      c.aux -= dt;
+      if (d < 30 && c.aux < 2.4 && c.aux > 0) {
+        c.flapAmp += (1.0 - c.flapAmp) * Math.min(1, dt * 4);
+        c.flap += dt * 5;
+        c.pitch += (-0.2 - c.pitch) * Math.min(1, dt * 2);
+        c.roll += (0 - c.roll) * Math.min(1, dt * 3);
+        c.yaw += angleTo(c.yaw, Math.atan2(c.tx - c.x, c.tz - c.z)) * Math.min(1, dt * 3);
+        const m = this.mouth(c);
+        const fx = c.tx - m.x, fy = c.ty + 1 - m.y, fz = c.tz - m.z, fd = Math.hypot(fx, fy, fz) || 1;
+        c.head += (Math.min(1.1, Math.max(-0.2, Math.atan2(-fy, Math.hypot(fx, fz)) + c.pitch)) - c.head) * Math.min(1, dt * 3);
+        if (c.aux < 2.0) this.fire.breathe(m.x, m.y, m.z, fx / fd, fy / fd, fz / fd, dt, 0.8);
+        c.y += (c.ty + 9 - c.y) * Math.min(1, dt * 0.8);
+      } else {
+        if (c.aux <= 0) c.aux = rand(6, 10);
+        const ang = Math.atan2(c.z - c.tz, c.x - c.tx) + 0.5;
+        const r = d > 40 ? 18 : 17 + Math.sin(this.time * 0.4 + c.seed) * 3;
+        this.fly(c, c.tx + Math.cos(ang) * r, c.ty + 10 + Math.sin(this.time * 0.7) * 2, c.tz + Math.sin(ang) * r, d > 40 ? def.speed : 7, dt);
+      }
+      if (c.timer <= 0) this.dragonFlee(c);
+    } else if (c.state === S.ESCAPE) {
+      // Driven off: away from the tower, climbing hard; then it circles far off.
+      const ax = c.x - c.tx, az = c.z - c.tz, l = Math.hypot(ax, az) || 1;
+      this.fly(c, c.x + (ax / l) * 60, c.ty + 55, c.z + (az / l) * 60, def.speed * 1.2, dt);
+      if (c.timer <= 0) { c.state = S.CIRCLE; c.timer = rand(40, 70); c.tx = c.x + (ax / l) * 160; c.tz = c.z + (az / l) * 160; }
     } else if (c.state === S.CLIMB) {
       this.fly(c, c.x + Math.sin(c.yaw) * 30, c.ty + 40, c.z + Math.cos(c.yaw) * 30, def.speed * 0.7, dt);
       if (c.timer <= 0) {
@@ -1114,6 +1145,37 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
     d.intent = I.SLEEP; d.tx = d.x; d.tz = d.z; this.pickPerch(d);
     return `state=${d.state}`;
   }
+
+  /**
+   * A dragon comes to harry the watch tower whose top is at (x, y, z): one already
+   * in the air nearby, or a new one sweeping in from afar. Null if none can.
+   */
+  dragonRaid(x: number, y: number, z: number): Creature | null {
+    const rt = this.species.find((s) => s.def.habitat === 'dragon')!;
+    let d = rt.list.find((c) => (c.state === S.CIRCLE || c.state === S.CLIMB) && Math.hypot(c.x - x, c.z - z) < 300) ?? null;
+    if (!d) {
+      if (rt.list.length >= rt.def.max) return null;
+      const a = Math.random() * TAU;
+      const sx = x + Math.cos(a) * 170, sz = z + Math.sin(a) * 170;
+      d = this.make(this.species.indexOf(rt), sx, y + 40, sz, new THREE.Color(pickOf(rt.def.tints)), rt.def);
+      rt.list.push(d);
+    }
+    if (d.prey) { d.prey.held = false; d.prey = null; }
+    d.state = S.RAID; d.timer = rand(45, 70); d.aux = rand(4, 7);
+    d.tx = x; d.ty = y; d.tz = z;
+    this.onSound?.('roar', d);
+    return d;
+  }
+
+  /** Arrows drove it off (or it lost interest): it flees the tower. */
+  dragonFlee(c: Creature): void {
+    if (c.state !== S.RAID) return;
+    c.state = S.ESCAPE; c.timer = 14;
+    this.onSound?.('roar', c);
+  }
+
+  /** Is this dragon still harrying its tower? */
+  raiding(c: Creature): boolean { return !c.gone && c.state === S.RAID; }
 
   /** Dev helper: make the dragon land at the next chance. */
   forcePerch(): void {

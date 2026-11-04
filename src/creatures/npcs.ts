@@ -328,7 +328,8 @@ export class NpcDirector {
         add('merchant', h, k++, { x: h.doorX + h.fx - h.fz, z: h.doorZ + h.fz + h.fx, y: h.y, fx: h.fx, fz: h.fz });
       }
     }
-    for (let i = 0; i < (L.city ? 6 : 1); i++) add('guard', null, k++);
+    // Villages keep a pair of guards (the bowmen on the watch towers belong to the watch director).
+    for (let i = 0; i < (L.city ? 6 : 2); i++) add('guard', null, k++);
     // The city has a bard on the square and a town crier.
     if (L.city) { add('bard', pick(L.houses) ?? null, k++); add('crier', pick(L.houses) ?? null, k++); }
     for (const h of L.houses) {

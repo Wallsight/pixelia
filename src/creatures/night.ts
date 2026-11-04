@@ -12,6 +12,7 @@ import type { Creature } from './creatures';
 import type { FireFx } from '../render/fire';
 import type { Post } from './war';
 import type { OrcJob } from './orcs';
+import type { WatchPost } from './watch';
 
 export type FighterKind = 'skeleton' | 'zombie' | 'demon' | 'spider' | 'ghost' | 'troll' | 'wisp' | 'deepone' | 'warrior' | 'archer' | 'mage'
   | 'soldier' | 'bowman' | 'captain' | 'orc' | 'orcspear' | 'shaman' | 'chief' | 'orcwork' | 'wolf';
@@ -59,6 +60,8 @@ export interface Fighter {
   garrison: Post | null;
   /** Orcs: their job in the camp. */
   orc: OrcJob | null;
+  /** Village tower bowmen: their tower. */
+  watch: WatchPost | null;
   slot: number;
   raid: { x: number; z: number; r: number } | null;
   /** Besieging a castle. */
@@ -252,7 +255,7 @@ export class NightDirector {
     const k = KINDS[kind];
     c.fighter = {
       kind, hero: ALLIES.includes(kind) || ORCS.includes(kind), hp: k.hp, max: k.hp, foe: null, cool: rand(0, 1), t: rand(0, 3), down: 0, flash: 0,
-      stone: false, party: null, garrison: null, orc: null, slot: 0, raid: null, siege: null, death: k.death, voice: rand(3, 12),
+      stone: false, party: null, garrison: null, orc: null, watch: null, slot: 0, raid: null, siege: null, death: k.death, voice: rand(3, 12),
     };
     if (kind === 'wisp' || kind === 'ghost') { c.y = col[0] + (kind === 'wisp' ? rand(0.8, 2) : 0.3); c.ground = col[0]; }
     return c;

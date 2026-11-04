@@ -175,7 +175,9 @@ export class StructureMap {
       let kind = castle ? SITE_CASTLE : SITE_CROSSROAD;
       // The dry lands belong mostly to the orcs.
       if (!castle && r < 0.7 && ARID.includes(s.biome) && this.flatAround(x, z, 26, 10) && !this.underIsle(x, z, 24)) kind = SITE_ORC;
-      else if (!castle && r < 0.62 && VILLAGE_BIOMES.includes(s.biome) && this.flatAround(x, z, 34, 9)) kind = SITE_VILLAGE;
+      // Villagers made up for the dry lands they lost with more villages in the green ones.
+      else if (!castle && VILLAGE_BIOMES.includes(s.biome) && this.flatAround(x, z, 34, 9)
+        && (r < 0.62 || (r < 0.78 && !ARID.includes(s.biome) && !this.underIsle(x, z, 30)))) kind = SITE_VILLAGE;
       result = { id, gx, gz, x, z, kind, name: kind === SITE_ORC ? `${this.orcName(gx, gz)} Obası` : this.makeName(gx, gz, kind), h: s.h };
       if (castle && !gloomy && hash01(gx, 503, gz, seed) < 0.8) result.held = true;
     }

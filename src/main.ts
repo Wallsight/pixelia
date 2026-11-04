@@ -327,6 +327,8 @@ function frame(): void {
         (window as unknown as Record<string, unknown>).__castle = () => creatures.war.nearestCastle(player.position.x, player.position.z);
         (window as unknown as Record<string, unknown>).__siege = () => creatures.war.devSiege();
         (window as unknown as Record<string, unknown>).__orcs = () => creatures.orcs.info();
+        (window as unknown as Record<string, unknown>).__watch = () => creatures.watch.info();
+        (window as unknown as Record<string, unknown>).__raid = () => creatures.watch.devRaid();
         (window as unknown as Record<string, unknown>).__orda = (capital = true) => creatures.orcs.nearest(player.position.x, player.position.z, capital);
         (window as unknown as Record<string, unknown>).__lookOrc = (job: string, dist = 5, up = 1.6) => {
           const c = creatures.orcs.find(job, player.position.x, player.position.z);

@@ -60,6 +60,8 @@ export interface Layout {
   banners: Spot[];
   flowers: Spot[];
   stage: Spot | null;
+  /** Village watch towers by the roads in (y = ground under the tower; the lookout stands on y + TOWER_H + 1). */
+  towers: Spot[];
 }
 
 export interface VillagePlan extends CastlePlan {
@@ -67,6 +69,8 @@ export interface VillagePlan extends CastlePlan {
 }
 
 const DOWN = 14, UP = 30;
+/** Height of a village watch tower's platform above the ground. */
+export const TOWER_H = 8;
 const SHOP_NAMES: Array<[HouseKind, string]> = [
   ['inn', 'Uykucu Ejder Hanı'], ['smithy', 'Demirci'], ['bakery', 'Fırın'], ['shop', 'Manav'],
   ['shop', 'Terzi'], ['shop', 'Baharatçı'], ['shop', 'Kitapçı'], ['shop', 'Çömlekçi'], ['shop', 'Şifacı'],
@@ -404,7 +408,28 @@ function buildLayout(t: Terrain, site: Site): Layout {
     }
   });
 
-  return { site, city, floorY, radius, plazaR, style, streets, houses, fields, stalls, lamps, benches, board, banners, flowers, stage };
+  // --- watch towers where the roads come in (villages only; placed last so nothing else moves)
+  const towers: Spot[] = [];
+  if (!city) {
+    streets.slice(0, Math.max(1, nRoads)).forEach((st, si) => {
+      if (towers.length >= 2) return;
+      for (let s = Math.min(st.len - 2, radius - 4); s > plazaR + 10 && towers.length <= si; s -= 3) {
+        for (const side of [1, -1]) {
+          if (towers.length > si) break;
+          const [px, pz, dx, dz] = pointAlong(st.pts, s);
+          const x = Math.round(px - dz * side * 5), z = Math.round(pz + dx * side * 5);
+          if (!free(x - 2, z - 2, x + 2, z + 2) || nearStreet(x, z, 3.6)) continue;
+          if (lamps.some((l) => Math.abs(l.x - x) <= 2 && Math.abs(l.z - z) <= 2)) continue;
+          const y = ground(x - 1, z - 1, x + 1, z + 1, 3);
+          if (y === null) continue;
+          taken.push([x - 1, z - 1, x + 1, z + 1]);
+          towers.push({ x, z, y, fx: Math.round(-dz * side), fz: Math.round(dx * side) });
+        }
+      }
+    });
+  }
+
+  return { site, city, floorY, radius, plazaR, style, streets, houses, fields, stalls, lamps, benches, board, banners, flowers, stage, towers };
 }
 
 // ------------------------------------------------------------------ voxels
@@ -546,6 +571,21 @@ export function buildVillagePlan(t: Terrain, site: Site): VillagePlan {
   for (const f of L.flowers) for (const [dx, dz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
     g.set(f.x + dx, Y, f.z + dz, B.GRASS);
     g.set(f.x + dx, Y + 1, f.z + dz, blooms[Math.floor(n(f.x + dx, 13, f.z + dz) * 4)]);
+  }
+
+  // Watch towers: a stone shaft, a plank platform with merlons at the corners, a banner, a lantern.
+  for (const tw of L.towers) {
+    const top = tw.y + TOWER_H;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const x = tw.x + dx, z = tw.z + dz, corner = dx !== 0 && dz !== 0;
+      g.pad(x, z, tw.y, B.COBBLE, TOWER_H + 4);
+      for (let y = tw.y + 1; y < top; y++) g.set(x, y, z, corner ? B.STONE_BRICKS : (y - tw.y) % 3 === 0 ? B.STONE_BRICKS : B.COBBLE);
+      g.set(x, top, z, corner ? B.STONE_BRICKS : B.PLANKS);
+      if (corner) { g.set(x, top + 1, z, B.STONE_BRICKS); g.set(x, top + 2, z, half(B.COBBLE)); }
+    }
+    g.set(tw.x + tw.fx * 2, tw.y + TOWER_H - 2, tw.z + tw.fz * 2, B.CLOTH_RED);
+    g.set(tw.x + tw.fx * 2, tw.y + TOWER_H - 3, tw.z + tw.fz * 2, B.CLOTH_RED);
+    g.set(tw.x - tw.fx * 2, tw.y + TOWER_H - 1, tw.z - tw.fz * 2, B.LANTERN);
   }
 
   // Lamps.
