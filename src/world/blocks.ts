@@ -23,6 +23,7 @@ export const TILE_NAMES = [
   'wheat', 'carrots', 'hay_top', 'hay_side', 'cloth_red', 'cloth_yellow', 'crate',
   'banner_red', 'banner_blue', 'banner_green', 'banner_black', 'banner_purple',
   'hide', 'skull', 'war_banner', 'red_leaves',
+  'bookshelf', 'barrel_side', 'barrel_top', 'bed_top', 'bed_side', 'oven',
 ] as const;
 
 export type TileName = (typeof TILE_NAMES)[number];
@@ -170,12 +171,18 @@ export const B = {
   WAR_BANNER: def('war_banner', KIND_SOLID, 'war_banner'),
   // The face tree's blood-red crown.
   RED_LEAVES: def('red_leaves', KIND_LEAVES, 'red_leaves'),
+  // Furniture inside the houses.
+  BOOKSHELF: def('bookshelf', KIND_SOLID, 'planks', 'bookshelf'),
+  BARREL: def('barrel', KIND_SOLID, 'barrel_top', 'barrel_side'),
+  BED: def('bed', KIND_SOLID, 'bed_top', 'bed_side', 'planks'),
+  OVEN: def('oven', KIND_SOLID, 'stone_bricks', 'oven'),
 } as const;
 for (const b of [B.MAGMA, B.LAVA, B.GLYPH, B.KELP, B.EMBER_FLOWER, B.SABER_BLADE]) EMISSIVE[b] = 1;
 WATERLOGGED[B.KELP] = 1;
 EMISSIVE[B.WINDOW_LIT] = 1;
 EMISSIVE[B.LANTERN] = 1;
 EMISSIVE[B.WINDOW_WOOD] = 1;
+EMISSIVE[B.OVEN] = 1;
 
 /** Heights (in eighths) available for partial surface blocks. */
 export const PARTIAL_HEIGHTS = [2, 4, 6] as const;
@@ -185,7 +192,7 @@ export const PARTIAL_HEIGHTS = [2, 4, 6] as const;
  * Partial blocks are solid but never hide neighbour faces.
  */
 export const PARTIAL = new Map<number, number[]>();
-for (const base of [B.GRASS, B.DIRT, B.SAND, B.SNOW, B.SNOW_GRASS, B.GLOOM_GRASS, B.STONE, B.GRAVEL, B.MOSS_STONE, B.PATH, B.COBBLE, B.ASH, B.BASALT, B.BLACK_SAND, B.ROOF_RED, B.ROOF_SLATE, B.THATCH, B.SANDSTONE, B.PLANKS]) {
+for (const base of [B.GRASS, B.DIRT, B.SAND, B.SNOW, B.SNOW_GRASS, B.GLOOM_GRASS, B.STONE, B.GRAVEL, B.MOSS_STONE, B.PATH, B.COBBLE, B.ASH, B.BASALT, B.BLACK_SAND, B.ROOF_RED, B.ROOF_SLATE, B.THATCH, B.SANDSTONE, B.PLANKS, B.CLOTH_RED, B.CLOTH_YELLOW, B.BED, B.DARK_PLANKS]) {
   const ids = PARTIAL_HEIGHTS.map((h) => {
     const id = nextId++;
     BLOCK_NAMES[id] = `${BLOCK_NAMES[base]}_${h}`;

@@ -200,6 +200,46 @@ const painters: Record<TileName, (c: Canvas) => void> = {
 
   oak_leaves(c) { leaves(c, pal('#2c5e30', '#346c37', '#3d7a3f', '#478948', '#539753')); },
   red_leaves(c) { leaves(c, pal('#7a1a1a', '#8e2020', '#a2282a', '#b83434', '#c84a40')); },
+  bookshelf(c) {
+    planks(c, pal('#6e4a2a', '#7a5432', '#86603a', '#583a20'));
+    const spines = pal('#a83a3a', '#3a5a9a', '#3a7a4a', '#c89a3a', '#6a3a7a', '#d8cfb8', '#5a3a2a');
+    for (const y0 of [1, 9]) {
+      let x = 1;
+      while (x < 15) {
+        const w = 1 + Math.floor(c.rng() * 2), h = 5 + Math.floor(c.rng() * 2), col = c.pick(spines);
+        for (let dx = 0; dx < w && x + dx < 15; dx++) for (let y = 0; y < h; y++) c.set(x + dx, y0 + 5 - y, col);
+        x += w;
+      }
+      for (let x2 = 0; x2 < TILE; x2++) c.set(x2, y0 + 6, hex('#3a2616'));
+    }
+  },
+  barrel_side(c) {
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) c.set(x, y, hex(x % 4 === 0 ? '#5a3c22' : c.rng() < 0.2 ? '#8a6038' : '#7a5430'));
+    for (const y of [2, 3, 12, 13]) for (let x = 0; x < TILE; x++) c.set(x, y, hex('#3a3634'));
+  },
+  barrel_top(c) {
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
+      const r = Math.hypot(x - 7.5, y - 7.5);
+      c.set(x, y, hex(r > 6.5 ? '#3a3634' : y % 4 === 0 ? '#5a3c22' : '#8a6038'));
+    }
+  },
+  bed_top(c) {
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
+      const pillow = y < 5 && x > 1 && x < 14;
+      c.set(x, y, hex(pillow ? (c.rng() < 0.2 ? '#e2dccc' : '#f2ecdc') : (x + y) % 6 < 3 ? '#b8404a' : '#a8363e'));
+    }
+    for (let x = 0; x < TILE; x++) c.set(x, 5, hex('#8a2a30'));
+  },
+  bed_side(c) {
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) c.set(x, y, hex(y < 9 ? ((x + y) % 6 < 3 ? '#b8404a' : '#a8363e') : y < 11 ? '#f2ecdc' : '#6e4a2a'));
+  },
+  oven(c) {
+    bricks(c, pal('#8a3b2e', '#9a4535', '#a8503c', '#7c3428'), hex('#d8cfc0'), false);
+    for (let y = 6; y < 15; y++) for (let x = 3; x < 13; x++) {
+      if (y < 8 && Math.abs(x - 7.5) > 3.5 - (8 - y) * 1.5) continue;
+      c.set(x, y, hex(y > 11 ? (c.rng() < 0.5 ? '#ff9a3a' : '#ffd060') : '#2a1810'));
+    }
+  },
   birch_leaves(c) { leaves(c, pal('#4f7a2c', '#5b8833', '#68963b', '#76a444', '#86b24f')); },
   spruce_leaves(c) { leaves(c, pal('#1c3d2a', '#224833', '#28533a', '#2f5e42', '#386a4b'), 0.12); },
   gloom_leaves(c) { leaves(c, pal('#3a3046', '#453852', '#50405e', '#5c466a', '#6b3f62'), 0.18); },

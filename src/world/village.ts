@@ -40,7 +40,7 @@ export interface House {
 }
 
 export interface Field { cx: number; cz: number; hw: number; hd: number; y: number; crop: number; street: number; s: number; entryX: number; entryZ: number }
-export interface Spot { x: number; z: number; y: number; fx: number; fz: number }
+export interface Spot { x: number; z: number; y: number; fx: number; fz: number; /** A work spot inside a house of this kind. */ inside?: HouseKind }
 
 export interface Layout {
   site: Site;
@@ -648,6 +648,121 @@ export function buildVillagePlan(t: Terrain, site: Site): VillagePlan {
   };
 }
 
+/** Door columns along the front wall (local x): one, or three on the inn and the hall. */
+export function doorCells(h: House): number[] {
+  return h.kind === 'hall' || h.kind === 'inn' ? [-1, 0, 1] : [0];
+}
+
+/** Where the one who works inside stands (local x, z: z towards the door), facing the door; null for homes. */
+export function workSpot(h: House): [number, number] | null {
+  const J = h.hd - 1;
+  switch (h.kind) {
+    case 'shop': return [0, -J];
+    case 'bakery': return [h.hw - 1, -J];
+    case 'smithy': return [1, -J + 1];
+    case 'inn': return [0, -J];
+    case 'hall': return [0, -J];
+    default: return null;
+  }
+}
+
+/** A work spot in world coordinates (cell centre) and the facing (towards the door). */
+export function workSpotWorld(h: House): { x: number; z: number; y: number; fx: number; fz: number } | null {
+  const w = workSpot(h);
+  if (!w) return null;
+  const rx = -h.fz, rz = h.fx;
+  return { x: h.cx + w[0] * rx + w[1] * h.fx + 0.5, z: h.cz + w[0] * rz + w[1] * h.fz + 0.5, y: h.y + 1, fx: h.fx, fz: h.fz };
+}
+
+/** Furniture by trade: beds and hearths at home, counters and shelves in shops, ovens, forges, the inn's bar, the hall's table. */
+function furnish(g: Grid, h: House, W: (lx: number, lz: number) => [number, number], n: (x: number, y: number, z: number, k?: number) => number, half: (b: number) => number): void {
+  const Y = h.y, top = Y + h.wallH, I = h.hw - 1, J = h.hd - 1;
+  const doors = doorCells(h);
+  // The way in from the door, and the worker's spot, stay clear.
+  const work = workSpot(h);
+  const clear = (lx: number, lz: number) => (doors.includes(lx) && lz >= J - 1) || (work !== null && lx === work[0] && lz === work[1]);
+  const put = (lx: number, lz: number, dy: number, b: number, rug = false) => {
+    if (Math.abs(lx) > I || Math.abs(lz) > J || (!rug && clear(lx, lz))) return;
+    const [x, z] = W(lx, lz);
+    g.set(x, Y + dy, z, b);
+  };
+  const low = (b: number) => PARTIAL.get(b)?.[0] ?? b; // 2/8: rugs
+  const mid = (b: number) => PARTIAL.get(b)?.[1] ?? b; // 4/8: beds, seats
+  const tall = (b: number) => PARTIAL.get(b)?.[2] ?? b; // 6/8: tables, counters
+  const k = n(h.cx, 20, h.cz);
+  // Wall cells (for shelves and banners hung on the walls).
+  const wall = (lx: number, lz: number, dy: number, b: number) => { const [x, z] = W(lx, lz); g.set(x, Y + dy, z, b); };
+  // A lantern hangs from the ceiling.
+  const lamp = (lx: number, lz: number) => { if (Math.abs(lx) <= I && Math.abs(lz) <= J) { const [x, z] = W(lx, lz); g.set(x, top, z, B.LANTERN); } };
+
+  switch (h.kind) {
+    case 'home': case 'tall': {
+      const side = k < 0.5 ? 1 : -1;
+      // Bed along the back wall, a hearth under the chimney, a table with seats, a shelf, a rug.
+      put(-I * side, -J, 1, mid(B.BED));
+      if (J >= 1) put(-I * side, -J + 1, 1, mid(B.BED));
+      put(I * side, -J, 1, B.MAGMA); put(I * side, -J, 2, B.COBBLE);
+      if (h.wallH > 3) put(I * side, -J, 3, B.COBBLE);
+      if (I >= 1 && J >= 1) { put(I * side, J, 1, tall(B.PLANKS)); put(I * side, J - 1, 1, mid(B.DARK_PLANKS)); }
+      put(-I * side, J, 1, n(h.cx, 21, h.cz) < 0.5 ? B.BOOKSHELF : B.BARREL);
+      if (h.kind === 'tall') put(-I * side, J, 2, B.BOOKSHELF);
+      put(0, 0, 1, low(k < 0.3 ? B.CLOTH_YELLOW : B.CLOTH_RED), true);
+      lamp(0, -J);
+      break;
+    }
+    case 'shop': {
+      // Counter across the room, goods on shelves behind.
+      for (let lx = -I; lx <= I; lx++) put(lx, -J + 1, 1, tall(B.PLANKS));
+      put(I, -J + 1, 1, C_AIR); // a gap to get behind
+      for (let lx = -I; lx <= I; lx++) { wall(lx, -h.hd, 2, (lx + 7) % 3 === 0 ? B.CRATE : B.BOOKSHELF); }
+      put(-I, -J, 1, B.BARREL); put(I, -J, 1, B.CRATE);
+      put(-I, J, 1, B.CRATE); put(I, J, 1, B.BARREL);
+      lamp(0, 0);
+      break;
+    }
+    case 'bakery': {
+      // Ovens in the back wall, sacks of flour, a counter with the bread.
+      wall(0, -h.hd, 1, B.OVEN); wall(-1, -h.hd, 1, B.OVEN);
+      put(-I, -J, 1, B.HAY); put(-I, -J, 2, B.HAY);
+      for (let lx = -I; lx <= I - 1; lx++) put(lx, -J + 1, 1, tall(B.PLANKS));
+      put(I, J, 1, B.BARREL);
+      lamp(0, 0);
+      break;
+    }
+    case 'smithy': {
+      // The forge (embers under a stone hood), the anvil, a water barrel, racks.
+      put(-I, -J, 1, B.MAGMA); put(-I, -J, 2, B.COBBLE); put(-I, -J, 3, B.COBBLE);
+      if (J >= 1) { put(-I, -J + 1, 1, B.COBBLE); }
+      put(0, -J + 1, 1, mid(B.DARK_PLANKS)); put(0, -J + 1, 2, mid(B.COBBLE));
+      put(I, J, 1, B.BARREL);
+      put(-I, J, 1, B.CRATE);
+      wall(1, -h.hd, 2, B.STEEL);
+      lamp(0, 0);
+      break;
+    }
+    case 'inn': {
+      // The bar along the back with barrels behind it, tables with seats, a hearth by the side wall.
+      for (let lx = -I; lx <= 1; lx++) put(lx, -J + 1, 1, tall(B.DARK_PLANKS));
+      put(-I, -J, 1, B.BARREL); put(-I + 1, -J, 1, B.BARREL); put(-I, -J, 2, B.BARREL);
+      for (const lz of [-J + 1, J - 1]) if (I >= 2) { put(I - 1, lz, 1, tall(B.PLANKS)); put(I, lz, 1, mid(B.DARK_PLANKS)); put(I - 2, lz, 1, mid(B.DARK_PLANKS)); }
+      put(-I, J, 1, B.MAGMA); put(-I, J, 2, B.COBBLE);
+      for (let lz = -J + 2; lz <= J; lz++) put(0, lz, 1, low(B.CLOTH_RED), true);
+      lamp(0, 0); lamp(I - 1, -J + 1);
+      break;
+    }
+    case 'hall': {
+      // A long table, shelves of ledgers on the side walls, banners behind the mayor's seat, a red carpet to the door.
+      for (let lx = -2; lx <= 2; lx++) put(lx, -J + 1, 1, tall(B.DARK_PLANKS));
+      for (let lz = -J; lz <= J - 1; lz++) { put(-I, lz, 1, B.BOOKSHELF); put(I, lz, 1, B.BOOKSHELF); }
+      wall(-1, -h.hd, 2, B.BANNER_RED); wall(1, -h.hd, 2, B.BANNER_RED); wall(-1, -h.hd, 3, B.BANNER_RED); wall(1, -h.hd, 3, B.BANNER_RED);
+      for (let lz = -J + 2; lz <= J; lz++) put(0, lz, 1, low(B.CLOTH_RED), true);
+      lamp(0, 0); lamp(-2, -J + 1); lamp(2, -J + 1);
+      break;
+    }
+  }
+  void half;
+}
+
 function buildHouse(g: Grid, h: House, n: (x: number, y: number, z: number, k?: number) => number, half: (b: number) => number, texts: SignRecord[]): void {
   const m = materials(h.style, h.kind, n(h.cx, 9, h.cz));
   const rx = -h.fz, rz = h.fx; // right axis in world
@@ -675,15 +790,13 @@ function buildHouse(g: Grid, h: House, n: (x: number, y: number, z: number, k?: 
       g.set(x, y, z, b);
     }
   }
-  // Door (front wall, centre) and a doorstep.
-  const [dx, dz] = W(0, h.hd);
-  g.set(dx, Y + 1, dz, B.DOOR_LOW);
-  g.set(dx, Y + 2, dz, B.DOOR_TOP);
-  if (h.kind === 'hall' || h.kind === 'inn') {
-    const [ex, ez] = W(1, h.hd); const [fx, fz] = W(-1, h.hd);
-    g.set(ex, Y + 1, ez, B.DOOR_LOW); g.set(ex, Y + 2, ez, B.DOOR_TOP);
-    g.set(fx, Y + 1, fz, B.DOOR_LOW); g.set(fx, Y + 2, fz, B.DOOR_TOP);
+  // Doorways (front wall, centre): open; the door leaves are props that swing open (render/doors.ts).
+  for (const lx of doorCells(h)) {
+    const [dx, dz] = W(lx, h.hd);
+    g.set(dx, Y + 1, dz, C_AIR);
+    g.set(dx, Y + 2, dz, C_AIR);
   }
+  furnish(g, h, W, n, half);
 
   // Roof.
   if (m.flat) {

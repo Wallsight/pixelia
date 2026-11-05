@@ -17,6 +17,7 @@ import { TowerBeacon } from './render/beacon';
 import { Soundscape } from './audio/soundscape';
 import { LegendBoard } from './render/legend-board';
 import { EldritchDirector } from './render/eldritch';
+import { DoorDirector } from './render/doors';
 import { Subtitle } from './ui/subtitle';
 import { PartyChat } from './ui/partychat';
 import { Compass } from './ui/compass';
@@ -126,6 +127,9 @@ const sound = new Soundscape(world, terrain, creatures);
 const eldritch = new EldritchDirector(env, SHADOWS, terrain, creatures.fire);
 scene.add(eldritch.group);
 eldritch.onSound = (ev, at) => sound.eldritch(ev, at);
+// House doors swing open as the player comes near.
+const doors = new DoorDirector(terrain, env, SHADOWS);
+scene.add(doors.group);
 discovery.onSound = (k) => sound.jingle(k);
 // The great dragon talks in subtitles and knows how many legends the player has found.
 const subtitle = new Subtitle();
@@ -427,6 +431,12 @@ function step(): void {
           else if (what === 'stare' || what === 'preach' || what === 'chant') creatures.npcs.devMad(what, x, z);
           return creatures.npcs.madInfo();
         };
+        // Dev: put the player at x, y, z looking along yaw/pitch (degrees); for shots inside buildings.
+        (window as unknown as Record<string, unknown>).__tp = (x: number, y: number, z: number, yaw = 0, pitch = -10) => {
+          player.position.set(x, y, z); player.velocity.set(0, 0, 0);
+          player.yaw = (yaw * Math.PI) / 180; player.pitch = (pitch * Math.PI) / 180;
+          return 'ok';
+        };
         (window as unknown as Record<string, unknown>).__sound = () => { sound.start(); return sound.stats(); };
         (window as unknown as Record<string, unknown>).__meter = () => sound.engine.meter();
         (window as unknown as Record<string, unknown>).__sfx = (n: string) => sound.demo(n);
@@ -471,6 +481,7 @@ function step(): void {
   if (spawned) {
     camera.getWorldDirection(camFwd);
     eldritch.update(dt, camera.position, camFwd, daynight.night, focusSample);
+    doors.update(dt, player.position.x, player.position.z);
     camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
     sound.update(dt, {
       camera, forward: camFwd, up: camUp, pos: player.position, vel: player.velocity,
