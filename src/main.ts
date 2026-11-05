@@ -20,6 +20,7 @@ import { EldritchDirector } from './render/eldritch';
 import { DoorDirector } from './render/doors';
 import { GoldDirector } from './game/gold';
 import { Interact } from './ui/interact';
+import { QuestDirector } from './game/quests';
 import { Subtitle } from './ui/subtitle';
 import { PartyChat } from './ui/partychat';
 import { Compass } from './ui/compass';
@@ -140,7 +141,7 @@ creatures.wyrm.onSpeak = (who, text, sec, asleep) => subtitle.show(who, text, se
 const partyChat = new PartyChat();
 creatures.onPartyChat = (party, who, text) => partyChat.post(party, who, text);
 creatures.onAnnounce = (kicker, title, sub) => discovery.announce(kicker, title, sub);
-worldMap.markers = () => [...creatures.rare.markers(), ...creatures.front.markers()];
+worldMap.markers = () => [...creatures.rare.markers(), ...creatures.front.markers(), ...quests.markers()];
 const compass = new Compass();
 // Always on screen (desktop): the map key, clickable too.
 const mapHint = document.createElement('button');
@@ -269,6 +270,18 @@ gold.onGold = (added, _total, kind, where) => {
   sound.jingle(kind === 'pouch' ? 'coin' : 'chest');
   if (kind === 'chest') discovery.notice('HAZİNE', `+${added} altın · ${where}`);
 };
+// Tasks from villagers with a "!" and from the notice boards on the squares.
+const quests = new QuestDirector(terrain, world, () => creatures.allNpcs(), (id) => discovery.found.has(id), (id) => discovery.rumor(id), env, SHADOWS, TOUCH);
+scene.add(quests.group);
+quests.onReward = (amount, title) => { gold.add(amount, title); discovery.announce('GÖREV TAMAM', title, `+${amount} altın`); };
+quests.onNotice = (kicker, title) => discovery.notice(kicker, title);
+quests.onSound = (k) => sound.jingle(k);
+quests.onTalk = (c) => {
+  // The giver stops and turns to the player.
+  c.yaw = Math.atan2(player.position.x - c.x, player.position.z - c.z);
+  if (c.npc) { c.npc.task = 'idle'; c.npc.t = 8; c.npc.route = []; }
+};
+interact.add((px, py, pz) => quests.candidate(px, py, pz));
 interact.add((px, py, pz) => {
   const c = gold.chestNear(px, py, pz);
   return c && { x: c.x, y: c.y, z: c.z, label: 'Sandığı aç', act: c.open };
@@ -319,7 +332,8 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyT' && player.locked) toggleTime();
   if (e.code === 'KeyM' && (player.locked || worldMap.open)) toggleMap();
   if (e.code === 'KeyC' && worldMap.open) worldMap.recenter();
-  if (e.code === 'KeyE' && player.locked && !worldMap.open) interact.trigger();
+  if (e.code === 'KeyE' && player.locked && !worldMap.open) { if (quests.asking) quests.accept(); else interact.trigger(); }
+  if (e.code === 'KeyQ' && quests.asking) quests.decline();
   // N: sound on/off, B: music on/off.
   if (e.code === 'KeyN' && player.locked) toggleSound();
   if (e.code === 'KeyB' && player.locked) {
@@ -465,6 +479,8 @@ function step(): void {
           return 'ok';
         };
         (window as unknown as Record<string, unknown>).__gold = () => gold.info(player.position.x, player.position.z);
+        // Dev: offer a task from the nearest board; 'yes' accepts the open offer.
+        (window as unknown as Record<string, unknown>).__quest = (what = '') => { if (what === 'yes') { quests.accept(); return quests.active.map((q) => `${q.kind} ${q.title} @${Math.round(q.x)},${Math.round(q.z)} ${q.have}/${q.need}${q.ready ? ' READY' : ''}`).join(' | '); } return quests.dev(player.position.x, player.position.z, what); };
         (window as unknown as Record<string, unknown>).__interact = () => { const c = gold.chestNear(player.position.x, player.position.y, player.position.z); const was = interact.label; interact.trigger(); return `locked=${player.locked} prompt=${was} chest=${c ? 'yes' : 'no'} at ${player.position.x.toFixed(1)},${player.position.y.toFixed(1)},${player.position.z.toFixed(1)}`; };
         (window as unknown as Record<string, unknown>).__sound = () => { sound.start(); return sound.stats(); };
         (window as unknown as Record<string, unknown>).__meter = () => sound.engine.meter();
@@ -512,6 +528,7 @@ function step(): void {
     eldritch.update(dt, camera.position, camFwd, daynight.night, focusSample);
     doors.update(dt, player.position.x, player.position.z);
     gold.update(dt, player.position.x, player.position.y, player.position.z);
+    quests.update(dt, player.position.x, player.position.y, player.position.z);
     interact.update(player.position.x, player.position.y, player.position.z, player.locked && !worldMap.open);
     camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
     sound.update(dt, {
@@ -526,7 +543,7 @@ function step(): void {
   shadows?.render(renderer, scene, camera.position, daynight.lightDir, daynight.shadowStrength);
   renderer.render(scene, camera);
   worldMap.draw(player.position.x, player.position.z, player.yaw);
-  compass.update(player.yaw, player.position.x, player.position.z, [...creatures.rare.markers(), ...creatures.front.markers()], creatures.rare.nextIn);
+  compass.update(player.yaw, player.position.x, player.position.z, [...creatures.rare.markers(), ...creatures.front.markers(), ...quests.markers()], creatures.rare.nextIn);
 
   frames++;
   fpsTime += dt;

@@ -12,6 +12,20 @@ import { createPropMaterial, type EnvUniforms } from '../render/materials';
 
 export interface BlockReader { getBlock(x: number, y: number, z: number): number }
 
+/** Standing height on (x, z): top of the highest solid with two free cells above; NaN for water/leaves; null if unloaded. */
+export function standY(world: BlockReader, x: number, z: number): number | null {
+  for (let y = HEIGHT - 2; y > 1; y--) {
+    const b = world.getBlock(x, y, z);
+    if (b < 0) return null;
+    if (b === B.AIR || KIND[b] === KIND_PLANT) continue;
+    if (KIND[b] === KIND_LEAVES || isLiquid(b) || !COLLIDES[b]) return NaN;
+    const up = world.getBlock(x, y + 1, z), up2 = world.getBlock(x, y + 2, z);
+    if ((up > 0 && COLLIDES[up]) || (up2 > 0 && COLLIDES[up2])) return NaN;
+    return y + HEIGHT8[b] / 8;
+  }
+  return NaN;
+}
+
 type Kind = 'pouch' | 'chest';
 interface Item {
   id: string;
@@ -172,19 +186,7 @@ export class GoldDirector {
     this.items.delete(it.id);
   }
 
-  /** Standing height on (x, z): top of the highest solid with two free cells above; NaN for water/leaves; null if unloaded. */
-  private ground(x: number, z: number): number | null {
-    for (let y = HEIGHT - 2; y > 1; y--) {
-      const b = this.world.getBlock(x, y, z);
-      if (b < 0) return null;
-      if (b === B.AIR || KIND[b] === KIND_PLANT) continue;
-      if (KIND[b] === KIND_LEAVES || isLiquid(b) || !COLLIDES[b]) return NaN;
-      const up = this.world.getBlock(x, y + 1, z), up2 = this.world.getBlock(x, y + 2, z);
-      if ((up > 0 && COLLIDES[up]) || (up2 > 0 && COLLIDES[up2])) return NaN;
-      return y + HEIGHT8[b] / 8;
-    }
-    return NaN;
-  }
+  private ground(x: number, z: number): number | null { return standY(this.world, x, z); }
 
   private build(it: Item): void {
     const g = new THREE.Group();
