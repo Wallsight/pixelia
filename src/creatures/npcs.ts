@@ -12,14 +12,14 @@ import { hash01 } from '../engine/noise';
 import { LM, SITE_CASTLE, SITE_CITY, SITE_ORC, SITE_VILLAGE, pointAlong, polylineLength, type Site } from '../world/structures';
 import { castleHouse } from '../world/castle';
 import { frontLayout } from '../world/front';
-import { villageLayout, workSpotWorld, type House, type HouseKind, type Layout, type Spot } from '../world/village';
+import { homeSpots, villageLayout, workSpotWorld, type House, type HouseKind, type Layout, type Spot } from '../world/village';
 import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
 import { direction, pick, rand } from './util';
 
 export type Role = 'villager' | 'farmer' | 'merchant' | 'elder' | 'guard' | 'kid' | 'traveler' | 'bard' | 'crier' | 'mad';
 type Task = 'idle' | 'walk' | 'chat' | 'work' | 'sell' | 'buy' | 'visit' | 'play' | 'patrol' | 'travel' | 'home' | 'perform' | 'listen' | 'announce' | 'fight'
-  | 'stare' | 'preach' | 'chant';
+  | 'stare' | 'preach' | 'chant' | 'rest' | 'sleep';
 
 export interface NpcState {
   role: Role;
@@ -58,6 +58,8 @@ interface Resident {
   stall: Spot | null;
   /** City folk who go mad, in order: the first `madCount` of them are. */
   madRank?: number;
+  /** Time (director clock) until which they will not be found at home again. */
+  outUntil?: number;
 }
 
 interface Gossip { text: string; id: string | null }
@@ -104,6 +106,10 @@ const TRADE: Partial<Record<HouseKind, string[]>> = {
   inn: ['Hoş geldin yolcu! Bir çorba?', 'Odalarımız temiz, yataklarımız yumuşak.', 'Ejderi gördün mü? Herkes onu soruyor.', 'Ozanı dinledin mi? Her akşam burada.'],
   hall: ['Belediye işleri bitmez...', 'Vergiler, dilekçeler, şikâyetler...', 'Şehrimize hoş geldin, yolcu.'],
 };
+/** At home: by the hearth, or about the room. */
+/** Who lives (and sleeps) in the homes. */
+const HOMEBODY = new Set<Role>(['villager', 'elder', 'farmer', 'kid']);
+const HOME = ['Çorba neredeyse hazır.', 'Şu ocak yine tütüyor...', 'Ekmek bayatlamış, fırına uğramalı.', 'Pencereyi kim açık bıraktı?', 'Biraz dinleneyim.', 'Yarın pazara gideceğim.'];
 const CALLS = ['Taze ekmek, sıcak ekmek!', 'Kumaşlar, baharatlar!', 'Elmalar tatlı, armutlar ballı!', 'Gel vatandaş, gel!', 'Bugün indirim var!'];
 const KIDS = ['Ebe sensin!', 'Yakalayamazsın!', 'Hahaha!', 'Bekle beni!', 'Sobe!'];
 const GUARD = ['Her şey yolunda.', 'Gözüm üstünüzde.', 'Ejderha görünürse çanı çalın!'];
@@ -475,9 +481,23 @@ export class NpcDirector {
       const role: Role = r.role === 'mad' && (r.madRank ?? 0) >= this.madCount ? 'villager' : r.role;
       const nightOwl = role === 'guard' || role === 'mad' || (role === 'villager' && Math.floor(r.seed) % 7 === 0);
       if (role === 'mad') r.asleep = false; // the mad do not sleep
+      const spots = r.home && HOMEBODY.has(r.role) ? homeSpots(r.home, this.terrain.seed) : null;
+      const homeNear = !!spots && Math.hypot(r.home!.doorX - this.player.x, r.home!.doorZ - this.player.z) < 30;
+      // A sleeper goes when the player leaves or the morning comes (they will step out of the door).
+      if (r.creature?.npc?.task === 'sleep' && (!homeNear || morning)) { r.creature.npc.remove = true; r.creature = null; }
       if (!r.creature) {
         if (r.asleep && morning) { r.wake -= dt; if (r.wake > 0) continue; r.asleep = false; }
-        if (r.asleep || (evening && !nightOwl)) { r.asleep = true; r.wake = rand(0, 25); continue; }
+        if (r.asleep || (evening && !nightOwl)) {
+          if (!r.asleep) { r.asleep = true; r.wake = rand(0, 25); }
+          // The first of the household sleeps in the bed while the player is about.
+          if (homeNear && town.residents.find((o) => o.home === r.home && HOMEBODY.has(o.role)) === r) this.spawnHome(town, r, role, spots!, 'sleep');
+          continue;
+        }
+        // Now and then someone is at home by day.
+        if (homeNear && (r.outUntil ?? 0) < this.time && hash01(Math.floor(r.seed), 3150, Math.floor(this.time / 240), this.terrain.seed) < 0.25) {
+          r.outUntil = this.time + 240;
+          if (this.spawnHome(town, r, role, spots!, 'rest')) continue;
+        }
         // Spawn: at home if the player is close (they step out), else somewhere on their way.
         const d = Math.hypot(town.site.x - this.player.x, town.site.z - this.player.z);
         let x: number, z: number;
@@ -498,10 +518,24 @@ export class NpcDirector {
           partner: null, lines: [], li: 0, stall: r.stall, stuck: 0, remove: false, road: null, s: 0, dir: 1, owl: nightOwl,
         };
         r.creature = c;
-      } else if (evening && !nightOwl && r.creature.npc && r.creature.npc.task !== 'home') {
+      } else if (evening && !nightOwl && r.creature.npc && r.creature.npc.task !== 'home' && r.creature.npc.task !== 'sleep') {
         this.goHome(r.creature);
       }
     }
+  }
+
+  /** Spawn a resident inside their home: asleep in the bed, or about the room. */
+  private spawnHome(town: Town, r: Resident, role: Role, spots: NonNullable<ReturnType<typeof homeSpots>>, task: 'sleep' | 'rest'): boolean {
+    const [x, z, yaw] = task === 'sleep' ? spots.bed : Math.floor(r.seed) % 2 ? spots.cook : spots.mid;
+    const c = this.host.spawnNpc(role, x, z, r.seed);
+    if (!c) return false;
+    c.yaw = yaw;
+    c.npc = {
+      role, town, res: r, route: [], ri: 0, task, next: 'idle', t: task === 'sleep' ? 1e9 : rand(50, 110),
+      partner: null, lines: [], li: 0, stall: null, stuck: 0, remove: false, road: null, s: 0, dir: 1, owl: false,
+    };
+    r.creature = c;
+    return true;
   }
 
   // ------------------------------------------------------------ travellers
@@ -690,6 +724,25 @@ export class NpcDirector {
       case 'listen': return this.listen(c, dt, night);
       case 'announce': return this.announce(c, dt, night);
       case 'stare': case 'preach': case 'chant': return this.rave(c, dt, night);
+      case 'sleep': {
+        // Lying on the bed, face up; a Zzz now and then.
+        this.host.idle(c, dt);
+        c.pitch = Math.PI / 2; c.walkAmp = 0; c.head = 0;
+        n.s += dt;
+        if (Math.floor(n.s / 7) !== n.li) { n.li = Math.floor(n.s / 7); if (Math.hypot(c.x - this.player.x, c.z - this.player.z) < 10) this.bubbles.say(c, 'Zzz...', 2.2); }
+        return true;
+      }
+      case 'rest': {
+        // At home: stirring the pot by the hearth, or pottering about; then out of the door.
+        this.host.idle(c, dt);
+        n.t -= dt;
+        n.s += dt;
+        c.tail = 0.5 + Math.sin(n.s * 4) * 0.25;
+        c.head = 0.35;
+        if (Math.random() < dt * 0.06 && Math.hypot(c.x - this.player.x, c.z - this.player.z) < 9) this.bubbles.say(c, pick(HOME), 2.6);
+        if (n.t <= 0 || night > 0.55) { n.remove = true; return false; }
+        return true;
+      }
       case 'fight': {
         const foe = n.partner;
         if (!foe || foe.gone || foe.dying > 0) { n.partner = null; this.plan(c, night); return true; }

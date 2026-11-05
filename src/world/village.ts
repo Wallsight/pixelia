@@ -674,6 +674,19 @@ export function workSpotWorld(h: House): { x: number; z: number; y: number; fx: 
   return { x: h.cx + w[0] * rx + w[1] * h.fx + 0.5, z: h.cz + w[0] * rz + w[1] * h.fz + 0.5, y: h.y + 1, fx: h.fx, fz: h.fz };
 }
 
+/** Inside a home: where the bed's foot end is (lying towards the back wall), the cook's spot by the hearth, the middle of the room. */
+export function homeSpots(h: House, seed: number): { bed: [number, number, number]; cook: [number, number, number]; mid: [number, number, number] } | null {
+  if (h.kind !== 'home' && h.kind !== 'tall') return null;
+  const side = hash01(h.cx, 20 * 7 + 2400, h.cz, seed) < 0.5 ? 1 : -1;
+  const I = h.hw - 1, J = h.hd - 1, rx = -h.fz, rz = h.fx;
+  const W = (lx: number, lz: number): [number, number] => [h.cx + lx * rx + lz * h.fx + 0.5, h.cz + lx * rz + lz * h.fz + 0.5];
+  const [bx, bz] = W(-I * side, J >= 1 ? -J + 1 : -J);
+  const [cx, cz] = W(I * side, J >= 1 ? -J + 1 : -J);
+  const [mx, mz] = W(0, 0);
+  // Facing (yaw) towards the door for the bed, towards the hearth (the back wall) for the cook.
+  return { bed: [bx + h.fx * 0.4, bz + h.fz * 0.4, Math.atan2(h.fx, h.fz)], cook: [cx, cz, Math.atan2(-h.fx, -h.fz)], mid: [mx, mz, Math.atan2(-h.fx, -h.fz)] };
+}
+
 /** Furniture by trade: beds and hearths at home, counters and shelves in shops, ovens, forges, the inn's bar, the hall's table. */
 function furnish(g: Grid, h: House, W: (lx: number, lz: number) => [number, number], n: (x: number, y: number, z: number, k?: number) => number, half: (b: number) => number): void {
   const Y = h.y, top = Y + h.wallH, I = h.hw - 1, J = h.hd - 1;
