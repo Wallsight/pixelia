@@ -23,6 +23,27 @@ import { Compass } from './ui/compass';
 import { villageLayout } from './world/village';
 import { IS_TOUCH, TouchControls } from './ui/touch';
 
+// ------------------------------------------------------------ errors
+// A failure during loading would otherwise leave "Dünya oluşturuluyor…" on screen forever
+// (on a phone there is no console): show it on the loading screen instead.
+const shownErrors = new Set<string>();
+/** Last error seen while the world was still loading. */
+let loadError = '';
+function showError(e: unknown): void {
+  let msg = e instanceof Error ? e.message : String(e);
+  if (/WebGL/i.test(msg) && !document.createElement('canvas').getContext('webgl2')) {
+    msg = 'Bu tarayıcıda WebGL2 kapalı ya da desteklenmiyor (iPhone Kilit Modu açıksa bu site için kapatın, ya da güncel Chrome/Safari deneyin).';
+  }
+  if (shownErrors.has(msg)) return;
+  shownErrors.add(msg);
+  console.error(e);
+  const start = document.getElementById('start') as HTMLButtonElement | null;
+  const el = document.getElementById('status');
+  if (el && start?.disabled) el.textContent = loadError = `Hata: ${msg.slice(0, 160)}`;
+}
+window.addEventListener('error', (e) => showError(e.error ?? e.message));
+window.addEventListener('unhandledrejection', (e) => showError(e.reason));
+
 // ------------------------------------------------------------ settings
 const params = new URLSearchParams(location.search);
 const intParam = (name: string, fallback: number, lo: number, hi: number): number => {
@@ -69,6 +90,7 @@ scene.add(atmosphere.group);
 let focusSample: ColumnSample | null = null;
 
 const world = new World(SEED, env, RENDER_DISTANCE, SHADOWS);
+world.onError = (msg) => showError(`chunk: ${msg}`);
 scene.add(world.group);
 
 const player = new PlayerController(camera, world, canvas);
@@ -275,6 +297,12 @@ let lastTime = performance.now();
 let frames = 0, fpsTime = 0, fps = 0, biomeName = '', biomeTimer = 0;
 
 function frame(): void {
+  // Ask for the next frame first: one bad frame must not stop the game (or freeze the loading screen).
+  requestAnimationFrame(frame);
+  try { step(); } catch (e) { showError(e); }
+}
+
+function step(): void {
   const now = performance.now();
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
@@ -291,7 +319,8 @@ function frame(): void {
     const sy = world.surfaceY(Math.floor(spawnX), Math.floor(spawnZ));
     const ready = world.loadedCount;
     const target = Math.round(Math.PI * 9);
-    status.textContent = `Dünya oluşturuluyor… ${Math.min(100, Math.round((ready / target) * 100))}%`;
+    const pct = Math.min(100, Math.round((ready / target) * 100));
+    status.textContent = `Dünya oluşturuluyor… ${pct}%` + (loadError ? ` — ${loadError}` : '');
     if (sy >= 0 && ready >= target) {
       player.spawn(spawnX, sy + 1, spawnZ);
       spawned = true;
@@ -448,6 +477,5 @@ function frame(): void {
       (player.flying ? 'UÇMA MODU\n' : '') +
       (player.inWater ? 'Suda\n' : '');
   }
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

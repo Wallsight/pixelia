@@ -25,12 +25,17 @@ export class World {
   private chunks = new Map<string, Chunk>();
   private pending = new Set<string>();
   private workers: Worker[] = [];
-  private busy: number[] = [];
+  /** Chunk keys each worker is working on, with the time they were sent. */
+  private busy: Array<Map<string, number>> = [];
+  /** How often each chunk had to be re-requested (worker error or timeout). */
+  private retries = new Map<string, number>();
   private queue: Array<[number, number]> = [];
   private materials: Record<'opaque' | 'plants' | 'water', THREE.ShaderMaterial>;
   private lastCenter = '';
   private maxInFlight: number;
   private signFactory: SignFactory;
+  /** Called with a short message when chunk generation fails (shown on the loading screen). */
+  onError: ((msg: string) => void) | null = null;
 
   constructor(seed: number, env: EnvUniforms, renderDistance: number, shadows: boolean) {
     this.renderDistance = renderDistance;
@@ -44,12 +49,37 @@ export class World {
     this.maxInFlight = 2;
     for (let i = 0; i < n; i++) {
       const w = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
-      w.onmessage = (e: MessageEvent<ChunkResult>) => { this.busy[i]--; this.onChunk(e.data); };
-      w.onerror = (e) => console.error('world worker error', e.message);
+      w.onmessage = (e: MessageEvent<ChunkResult>) => {
+        // A late answer for a chunk that was already re-requested elsewhere is dropped.
+        if (!this.busy[i].delete(key(e.data.cx, e.data.cz))) return;
+        this.onChunk(e.data);
+      };
+      w.onerror = (e) => {
+        e.preventDefault();
+        const msg = e.message || 'worker could not start';
+        console.error('world worker error', msg);
+        this.onError?.(msg);
+        this.requeue(i);
+      };
       const init: WorkerRequest = { type: 'init', seed };
       w.postMessage(init);
       this.workers.push(w);
-      this.busy.push(0);
+      this.busy.push(new Map());
+    }
+  }
+
+  /** Puts a worker's unfinished chunks back at the front of the queue (or only the stale ones). */
+  private requeue(i: number, olderThan = -1): void {
+    const now = performance.now();
+    for (const [k, sent] of this.busy[i]) {
+      if (olderThan >= 0 && now - sent < olderThan) continue;
+      this.busy[i].delete(k);
+      this.pending.delete(k);
+      const n = (this.retries.get(k) ?? 0) + 1;
+      this.retries.set(k, n);
+      if (n > 4) { this.onError?.(`chunk ${k} failed ${n - 1} times`); continue; }
+      const [cx, cz] = k.split(',').map(Number);
+      this.queue.unshift([cx, cz]);
     }
   }
 
@@ -107,6 +137,8 @@ export class World {
       wanted.sort((a, b) => a[2] - b[2]);
       this.queue = wanted.map(([cx, cz]) => [cx, cz]);
     }
+    // A worker that went quiet (crashed or was killed by the browser) must not stall loading forever.
+    for (let i = 0; i < this.workers.length; i++) this.requeue(i, 20000);
     this.dispatch();
   }
 
@@ -114,14 +146,15 @@ export class World {
     while (this.queue.length) {
       let best = -1;
       for (let i = 0; i < this.workers.length; i++) {
-        if (this.busy[i] < this.maxInFlight && (best < 0 || this.busy[i] < this.busy[best])) best = i;
+        const n = this.busy[i].size;
+        if (n < this.maxInFlight && (best < 0 || n < this.busy[best].size)) best = i;
       }
       if (best < 0) return;
       const [cx, cz] = this.queue.shift()!;
       const k = key(cx, cz);
       if (this.chunks.has(k) || this.pending.has(k)) continue;
       this.pending.add(k);
-      this.busy[best]++;
+      this.busy[best].set(k, performance.now());
       const req: WorkerRequest = { type: 'gen', cx, cz };
       this.workers[best].postMessage(req);
     }
@@ -130,6 +163,7 @@ export class World {
   private onChunk(r: ChunkResult): void {
     const k = key(r.cx, r.cz);
     this.pending.delete(k);
+    this.retries.delete(k);
     // Dropped while in flight (player moved far away)?
     const [pcx, pcz] = this.lastCenter.split(',').map(Number);
     if (Math.hypot(r.cx - pcx, r.cz - pcz) > this.renderDistance + 2) { this.dispatch(); return; }
