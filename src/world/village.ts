@@ -411,11 +411,13 @@ function buildLayout(t: Terrain, site: Site): Layout {
   // --- watch towers where the roads come in (villages only; placed last so nothing else moves)
   const towers: Spot[] = [];
   if (!city) {
-    streets.slice(0, Math.max(1, nRoads)).forEach((st, si) => {
+    streets.slice(0, Math.max(1, nRoads)).forEach((st) => {
       if (towers.length >= 2) return;
-      for (let s = Math.min(st.len - 2, radius - 4); s > plazaR + 10 && towers.length <= si; s -= 3) {
+      // At most one tower per road, even when an earlier road had no room for its own.
+      let placed = false;
+      for (let s = Math.min(st.len - 2, radius - 4); s > plazaR + 10 && !placed; s -= 3) {
         for (const side of [1, -1]) {
-          if (towers.length > si) break;
+          if (placed) break;
           const [px, pz, dx, dz] = pointAlong(st.pts, s);
           const x = Math.round(px - dz * side * 5), z = Math.round(pz + dx * side * 5);
           if (!free(x - 2, z - 2, x + 2, z + 2) || nearStreet(x, z, 3.6)) continue;
@@ -423,7 +425,11 @@ function buildLayout(t: Terrain, site: Site): Layout {
           const y = ground(x - 1, z - 1, x + 1, z + 1, 3);
           if (y === null) continue;
           taken.push([x - 1, z - 1, x + 1, z + 1]);
-          towers.push({ x, z, y, fx: Math.round(-dz * side), fz: Math.round(dx * side) });
+          // Face the road along one axis, so the banner and lantern sit flat against the shaft.
+          const ax = -dz * side, az = dx * side;
+          const [fx, fz] = Math.abs(ax) >= Math.abs(az) ? [Math.sign(ax), 0] : [0, Math.sign(az)];
+          towers.push({ x, z, y, fx, fz });
+          placed = true;
         }
       }
     });

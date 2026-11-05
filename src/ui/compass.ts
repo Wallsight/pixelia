@@ -22,8 +22,6 @@ export class Compass {
     document.body.appendChild(this.canvas);
   }
 
-  set visible(v: boolean) { this.canvas.style.display = v ? '' : 'none'; }
-
   /** yaw: the player's (looking along -sin, -cos); +z is south. */
   update(yaw: number, px: number, pz: number, marks: CompassMark[], next: number): void {
     const g = this.g, d = this.dpr;

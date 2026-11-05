@@ -14,6 +14,7 @@ import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
 import { fighterStats, type Fighter, type FighterKind, type NightDirector } from './night';
 import type { WarHost } from './war';
+import { angleTo, pick, rand, TAU } from './util';
 
 export type JobKind = 'chief' | 'shaman' | 'drum' | 'guard' | 'tower' | 'arena' | 'crowd' | 'smith' | 'haul' | 'rack' | 'throw' | 'wolf' | 'fire' | 'loaf';
 
@@ -32,6 +33,8 @@ export interface OrcJob {
   /** Spare state: hauling leg, wander target, beat counter. */
   dir: number;
   tx: number; tz: number;
+  /** Countdown to the next pause or line (the shaman's chant). */
+  cd: number;
 }
 
 interface Camp {
@@ -48,16 +51,6 @@ interface Camp {
   bout: { t: number; down: OrcJob | null; downT: number; hits: number };
   chiefT: number;
 }
-
-const rand = (a: number, b: number) => a + Math.random() * (b - a);
-const pick = <T>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
-const TAU = Math.PI * 2;
-const angleTo = (from: number, to: number) => {
-  let d = (to - from) % TAU;
-  if (d > Math.PI) d -= TAU;
-  if (d < -Math.PI) d += TAU;
-  return d;
-};
 
 // Orcish is invented for Pixelia; they also speak a rough Turkish.
 const SHOUT = ['Gruh-dakh!', 'Vorr nak-ta!', 'Hrom! Hrom!', 'Ukh-zar mogra!', 'Dur-gakh!', 'Rakka-tul!', 'Zhar ka-mok!'];
@@ -126,7 +119,7 @@ export class OrcDirector {
     const add = (job: JobKind, kind: FighterKind, s: OrcSpot | [number, number, number], shift: OrcJob['shift'] = 'always') => {
       const [hx, hz, hyaw] = Array.isArray(s) ? s : [s.x, s.z, s.yaw];
       const hy = (Array.isArray(s) ? L.floorY : s.y) + 1;
-      const j: OrcJob = { camp: g, job, kind, i: g.jobs.filter((o) => o.job === job).length, hx, hz, hyaw, hy, shift, c: null, t: rand(1, 4), scan: rand(0, 0.5), leaving: false, dir: 0, tx: hx, tz: hz };
+      const j: OrcJob = { camp: g, job, kind, i: g.jobs.filter((o) => o.job === job).length, hx, hz, hyaw, hy, shift, c: null, t: rand(1, 4), scan: rand(0, 0.5), leaving: false, dir: 0, tx: hx, tz: hz, cd: rand(8, 16) };
       g.jobs.push(j);
       return j;
     };
@@ -228,7 +221,7 @@ export class OrcDirector {
     }
     // Stand on the ground (or the platform), not on a roof over the spot.
     if (j.job !== 'wolf') { c.y = j.hy; c.ground = j.hy; c.col = NaN; }
-    j.c = c; j.leaving = false; j.dir = 0; j.tx = j.hx; j.tz = j.hz;
+    j.c = c; j.leaving = false; j.dir = 0; j.tx = j.hx; j.tz = j.hz; j.cd = rand(8, 16);
   }
 
   /** The war drum: a steady pattern by day, faster by night, a rest now and then. */
@@ -495,9 +488,9 @@ export class OrcDirector {
     const a = j.dir;
     const tx = cx + Math.cos(a) * r, tz = cz + Math.sin(a) * r;
     this.walk(j, c, tx, tz, g.night ? 1.1 : 0.7, dt);
-    j.tx -= dt;
-    if (j.tx <= 0) {
-      j.tx = rand(8, 16);
+    j.cd -= dt;
+    if (j.cd <= 0) {
+      j.cd = rand(8, 16);
       j.t = rand(4, 7);
       this.say(c, pick(SHAMAN), 3, 40);
     }

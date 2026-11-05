@@ -277,14 +277,10 @@ export function collectSigns(t: Terrain, blocks: Uint8Array, cx: number, cz: num
       });
     }
   }
-  // Settlement texts (shop plaques, name boards).
+  // Settlement and orc camp texts (shop plaques, name boards).
   for (const s of t.structures.sitesNear(ix0, iz0, ix0 + CHUNK, iz0 + CHUNK, SETTLEMENT_REACH)) {
-    if (!isSettlement(s)) continue;
-    for (const rec of villageFor(t, s).texts) if (inside(Math.floor(rec.x), Math.floor(rec.z))) out.push(rec);
-  }
-  for (const s of t.structures.sitesNear(ix0, iz0, ix0 + CHUNK, iz0 + CHUNK, SETTLEMENT_REACH)) {
-    if (s.kind !== SITE_ORC) continue;
-    for (const rec of orcFor(t, s).texts) if (inside(Math.floor(rec.x), Math.floor(rec.z))) out.push(rec);
+    const texts = isSettlement(s) ? villageFor(t, s).texts : s.kind === SITE_ORC ? orcFor(t, s).texts : null;
+    if (texts) for (const rec of texts) if (inside(Math.floor(rec.x), Math.floor(rec.z))) out.push(rec);
   }
   // Landmark texts (tombstones, plaques, their own signposts).
   for (const lm of t.landmarks.near(ix0, iz0, ix0 + CHUNK, iz0 + CHUNK, LANDMARK_REACH)) {

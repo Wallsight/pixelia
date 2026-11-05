@@ -15,6 +15,7 @@ import type { OrcJob } from './orcs';
 import type { WatchPost } from './watch';
 import type { RareEvent } from './rare';
 import { BATTLE_CALLS, CAMP_BANTER, DOWN_CALLS, ROAD_BANTER, VICTORY_CALLS, exchange } from './banter';
+import { angleTo, pick, rand, TAU } from './util';
 
 export type FighterKind = 'skeleton' | 'zombie' | 'demon' | 'spider' | 'ghost' | 'troll' | 'wisp' | 'deepone' | 'warrior' | 'archer' | 'mage'
   | 'soldier' | 'bowman' | 'captain' | 'orc' | 'orcspear' | 'shaman' | 'chief' | 'orcwork' | 'wolf';
@@ -108,16 +109,6 @@ export interface NightHost {
   alarm(raider: Creature): void;
   readonly fire: FireFx;
 }
-
-const rand = (a: number, b: number) => a + Math.random() * (b - a);
-const pick = <T>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
-const TAU = Math.PI * 2;
-const angleTo = (from: number, to: number) => {
-  let d = (to - from) % TAU;
-  if (d > Math.PI) d -= TAU;
-  if (d < -Math.PI) d += TAU;
-  return d;
-};
 
 // ------------------------------------------------------------------ tables
 

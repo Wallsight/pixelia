@@ -4,9 +4,7 @@
 
 import type { Creature } from './creatures';
 import type { FighterKind } from './night';
-
-const rand = (a: number, b: number) => a + Math.random() * (b - a);
-const pick = <T>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
+import { pick, rand } from './util';
 
 const NICKS: Partial<Record<FighterKind, string[]>> = {
   warrior: ['KılıçBaba', 'xXDemirYumrukXx', 'TankEmre', 'KalkanlıKaya', 'Barbar_Bora', 'AggroKral'],
@@ -59,4 +57,3 @@ export function exchange(members: Creature[], lines: string[], say: (c: Creature
   }, i * gap));
 }
 
-export { pick as pickLine };

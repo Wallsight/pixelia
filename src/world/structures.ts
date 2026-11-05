@@ -79,7 +79,6 @@ export class StructureMap {
     return bad <= 4;
   }
 
-  /** Candidate centre of a cell (before choosing its kind). */
   /** A floating island hangs over the ground within r (it would roof over a camp). */
   private underIsle(x: number, z: number, r: number): boolean {
     for (const rr of [0, r * 0.5, r]) for (let k = 0; k < (rr ? 8 : 1); k++) {
@@ -89,6 +88,7 @@ export class StructureMap {
     return false;
   }
 
+  /** Candidate centre of a cell (before choosing its kind). */
   private candidate(gx: number, gz: number, attempt: number): [number, number] {
     const seed = this.terrain.seed;
     return [
@@ -137,7 +137,8 @@ export class StructureMap {
 
   /** Inside (or on the walls of, or within pad of) a garrisoned castle or an orc camp: wild things keep out. */
   guarded(x: number, z: number, pad = 0): boolean {
-    return this.sitesNear(x - 60, z - 60, x + 60, z + 60, 0).some((c) =>
+    const r = 42 + pad; // the largest guarded footprint (the orc capital) plus the padding
+    return this.sitesNear(x - r, z - r, x + r, z + r, 0).some((c) =>
       (c.kind === SITE_CASTLE && c.held && Math.max(Math.abs(c.x - x), Math.abs(c.z - z)) < 27 + pad)
       || (c.kind === SITE_ORC && Math.hypot(c.x - x, c.z - z) < (c.capital ? 42 : 20) + pad));
   }

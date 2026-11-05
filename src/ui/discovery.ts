@@ -34,7 +34,10 @@ export class Discovery {
   private dirty = false;
   private toastEl: HTMLDivElement;
   private toastTimer = 0;
-  private queue: Array<[string, string, string]> = [];
+  /** Toasts waiting: title, sub line, kicker, and whether it is a short notice. */
+  private queue: Array<[string, string, string, boolean]> = [];
+  /** The toast on screen now. */
+  private current: [string, string, string, boolean] | null = null;
   private storeKey: string;
   /** Sound hook for discoveries and rumours. */
   onSound: ((kind: 'found' | 'rumor') => void) | null = null;
@@ -100,9 +103,10 @@ export class Discovery {
     // Toast queue.
     if (this.toastTimer > 0) {
       this.toastTimer -= dt;
-      if (this.toastTimer <= 0) this.toastEl.classList.remove('show');
+      if (this.toastTimer <= 0) { this.toastEl.classList.remove('show'); this.current = null; }
     } else if (this.queue.length) {
-      const [title, sub, kick] = this.queue.shift()!;
+      this.current = this.queue.shift()!;
+      const [title, sub, kick] = this.current;
       this.toastEl.replaceChildren();
       const k = document.createElement('div'); k.className = 'kicker'; k.textContent = kick;
       const t = document.createElement('div'); t.className = 'title'; t.textContent = title;
@@ -114,7 +118,7 @@ export class Discovery {
   }
 
   private toast(title: string, sub: string, _id: string, kicker = sub ? 'KEŞFEDİLDİ' : 'SÖYLENTİ'): void {
-    this.queue.push([title, sub, kicker]);
+    this.queue.push([title, sub, kicker, false]);
   }
 
   /** A big world notice (a rare creature, a victory): queued like a discovery. */
@@ -125,9 +129,12 @@ export class Discovery {
 
   /** A short notice in the same toast slot (e.g. sound settings). */
   notice(kicker: string, title: string): void {
-    this.queue.length = 0;
+    // Shown at once and replacing older notices; a discovery or announcement it cuts short comes back after it.
+    this.queue = this.queue.filter((q) => !q[3]);
+    if (this.current && !this.current[3]) this.queue.unshift(this.current);
+    this.queue.unshift([title, '', kicker, true]);
+    this.current = null;
     this.toastTimer = 0;
-    this.toast(title, '', '', kicker);
   }
 
   private discover(id: string, name: string): void {

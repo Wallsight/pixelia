@@ -10,6 +10,7 @@ import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
 import { fighterStats, type NightDirector } from './night';
 import type { WarHost } from './war';
+import { angleTo, pick, rand } from './util';
 
 export interface WatchHost extends WarHost {
   dragonRaid(x: number, y: number, z: number): Creature | null;
@@ -31,16 +32,6 @@ export interface WatchPost {
   need: number;
   shoutT: number;
 }
-
-const rand = (a: number, b: number) => a + Math.random() * (b - a);
-const pick = <T>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
-const TAU = Math.PI * 2;
-const angleTo = (from: number, to: number) => {
-  let d = (to - from) % TAU;
-  if (d > Math.PI) d -= TAU;
-  if (d < -Math.PI) d += TAU;
-  return d;
-};
 
 const ALARM = ['EJDERHA! EJDERHA!', 'Gökyüzünde ejder var! Saklanın!', 'Ejderha kuleye geliyor!'];
 const SHOOTING = ['Al bunu!', 'Bir ok daha!', 'Gel bakalım, kertenkele!', 'Kanatlarına nişan alıyorum!', 'Sıcak! Çok sıcak!', 'Kulem yanıyor!'];
@@ -87,7 +78,8 @@ export class WatchDirector {
     }
     for (const [id, list] of this.posts) {
       const d = Math.hypot(list[0]?.site.x - px, list[0]?.site.z - pz);
-      for (const p of list) p.active = p.active ? d < 170 : d < 130;
+      // Per tower, so a bowman never stands past the 200 at which heroes despawn.
+      for (const p of list) { const pd = Math.hypot(p.x - px, p.z - pz); p.active = p.active ? pd < 170 : pd < 130; }
       if (!list.length || d > 400) this.posts.delete(id);
     }
   }

@@ -22,6 +22,7 @@ import { fighterStats, type Fighter, type FighterKind, type NightDirector, type 
 import type { FireFx } from '../render/fire';
 import { createPropMaterial, type EnvUniforms } from '../render/materials';
 import { LAYER_PROP_CASTER } from '../render/shadows';
+import { angleTo, pick, rand, TAU } from './util';
 
 export type Duty = 'gate' | 'watch' | 'patrol' | 'drill' | 'spar' | 'archery' | 'captain' | 'fire' | 'shield' | 'rampart';
 
@@ -109,16 +110,6 @@ export interface WarHost {
   sound(ev: NightSound, c: Creature): void;
   readonly fire: FireFx;
 }
-
-const rand = (a: number, b: number) => a + Math.random() * (b - a);
-const pick = <T>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
-const TAU = Math.PI * 2;
-const angleTo = (from: number, to: number) => {
-  let d = (to - from) % TAU;
-  if (d > Math.PI) d -= TAU;
-  if (d < -Math.PI) d += TAU;
-  return d;
-};
 
 /** Orders on the parade ground and what the ranks do. */
 type Act = 'form' | 'level' | 'lunge' | 'raise' | 'right' | 'front' | 'march' | 'halt';
@@ -571,7 +562,6 @@ export class WarDirector {
     for (const y of [0.55, 1.55, 2.55, 3.55]) box(3.0, 0.12, 0.22, 0, y, this.iron!);
     return grp;
   }
-
 
   private spawn(g: Garrison, p: Post, dPlayer: number): void {
     const L = g.L;

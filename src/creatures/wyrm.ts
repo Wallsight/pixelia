@@ -13,6 +13,7 @@ import type { Creature } from './creatures';
 import type { FireFx } from '../render/fire';
 import { greatDragon } from './models';
 import { PART, type Box } from './rig';
+import { direction, pick, rand } from './util';
 
 export const GREAT_DRAGON = 'greatdragon';
 /** How big the great dragon is next to an ordinary one. */
@@ -42,7 +43,6 @@ const EYES: Array<[number, number, number]> = [[0.67, 4.9, 5.9], [-0.67, 4.9, 5.
 const NOSE: [number, number, number] = [0, 4.6, 7.35];
 const HEAD_SLEEP = 0.62, HEAD_AWAKE = 0.12, TAIL_CURL = 1.05;
 
-const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const cellKey = (x: number, y: number, z: number) => ((x + 32768) * 65536 + (z + 32768)) * 512 + y;
 
 type V = [number, number, number];
@@ -52,12 +52,6 @@ function rotAbout(p: V, piv: V, axis: 0 | 1 | 2, a: number): V {
   if (axis === 0) return [p[0], piv[1] + c * y - s * z, piv[2] + s * y + c * z];
   if (axis === 1) return [piv[0] + c * x + s * z, p[1], piv[2] - s * x + c * z];
   return [piv[0] + c * x - s * y, piv[1] + s * x + c * y, p[2]];
-}
-const pick = <T>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
-
-function direction(dx: number, dz: number): string {
-  const names = ['Doğuda', 'Güneydoğuda', 'Güneyde', 'Güneybatıda', 'Batıda', 'Kuzeybatıda', 'Kuzeyde', 'Kuzeydoğuda'];
-  return names[(Math.round(Math.atan2(dz, dx) / (Math.PI / 4)) + 8) % 8];
 }
 
 const SNACK_AWAKE = ['Pardon. Atıştırmalık.', 'Hıh. Kemikli çıktı.', 'Altınlarımın yanına izinsiz gelinmez.', 'Nerede kalmıştık?'];
@@ -437,7 +431,7 @@ export class WyrmDirector {
       ['Uyumak güzel. Rüyamda yine gençtim; gök daha maviydi, altın daha parlaktı.'],
     ];
     const t = this.terrain.tower;
-    if (t) pool.push([`${direction(t.x - c.x, t.z - c.z)} kara bir kule var. Tepesindeki göz hiç uyumaz. Ben de onu sevmem.`]);
+    if (t) pool.push([`${direction(t.x - c.x, t.z - c.z, true)} kara bir kule var. Tepesindeki göz hiç uyumaz. Ben de onu sevmem.`]);
     if (ctx.flying) pool.push(['Kanatsız uçuyorsun. Ne kaba bir büyü.']);
     // Things not yet said come first.
     pool.sort(() => Math.random() - 0.5);

@@ -138,7 +138,11 @@ const compass = new Compass();
 const mapHint = document.createElement('button');
 mapHint.id = 'map-hint';
 mapHint.innerHTML = '<span class="key">M</span> Harita';
-mapHint.addEventListener('click', (e) => { e.stopPropagation(); toggleMap(); });
+mapHint.addEventListener('click', (e) => {
+  e.stopPropagation();
+  mapHint.blur(); // keep focus off it, or Enter/Space would toggle the map again
+  if (player.locked || worldMap.open) toggleMap();
+});
 document.body.appendChild(mapHint);
 creatures.wyrm.onSound = (ev, at, text) => sound.wyrm(ev, at, text);
 creatures.wyrm.context = () => ({ found: legendBoard?.foundCount ?? 0, flying: player.flying });

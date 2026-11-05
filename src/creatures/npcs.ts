@@ -12,6 +12,7 @@ import { castleHouse } from '../world/castle';
 import { villageLayout, type House, type Layout, type Spot } from '../world/village';
 import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
+import { direction, pick, rand } from './util';
 
 export type Role = 'villager' | 'farmer' | 'merchant' | 'elder' | 'guard' | 'kid' | 'traveler' | 'bard' | 'crier';
 type Task = 'idle' | 'walk' | 'chat' | 'work' | 'sell' | 'buy' | 'visit' | 'play' | 'patrol' | 'travel' | 'home' | 'perform' | 'listen' | 'announce' | 'fight';
@@ -65,10 +66,8 @@ export interface NpcHost {
   hit(target: Creature, dmg: number, from: Creature): void;
 }
 
-const rand = (a: number, b: number) => a + Math.random() * (b - a);
 /** NpcState.li value marking the listening half of a conversation. */
 const LISTENER = -99;
-const pick = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 
 // ------------------------------------------------------------------ talk
 
@@ -117,12 +116,6 @@ const LM_HINT: Record<number, string> = {
   [LM.SWORD_THRONE]: 'yüz kılıçtan dövülmüş bir tahtın durduğu yıkık bir salon', [LM.ICE_WALL]: 'buzdan dev bir duvar; kış oradan gelirmiş',
   [LM.FACE_TREE]: 'kan kırmızısı yapraklı, gövdesinde ağlayan bir yüz olan beyaz bir ağaç', [LM.DRAGON_SKULL]: 'eski savaşlardan kalma dev bir ejder kafatası',
 };
-
-function direction(dx: number, dz: number): string {
-  const names = ['doğuda', 'güneydoğuda', 'güneyde', 'güneybatıda', 'batıda', 'kuzeybatıda', 'kuzeyde', 'kuzeydoğuda'];
-  const a = Math.atan2(dz, dx); // +z is south on the map
-  return names[(Math.round(a / (Math.PI / 4)) + 8) % 8];
-}
 
 function gossipFor(t: Terrain, site: Site): Gossip[] {
   const out: Gossip[] = [];

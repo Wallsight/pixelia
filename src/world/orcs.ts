@@ -213,7 +213,8 @@ function buildLayout(t: Terrain, site: Site): OrcLayout {
   } else {
     const [dx, dz] = P(Math.PI / 2, 4.6);
     drumAt = [dx, dz];
-    drummers.push(facing(dx + Math.round(Math.cos(G + Math.PI / 2)), dz + Math.round(Math.sin(G + Math.PI / 2)), dx + 0.5, dz + 0.5));
+    // Like the capital's drummers: a world position beside the drum, not a block corner.
+    drummers.push(facing(dx + 0.5 + Math.cos(G + Math.PI / 2) * 1.5, dz + 0.5 + Math.sin(G + Math.PI / 2) * 1.5, dx + 0.5, dz + 0.5));
     reserve(dx, dz, 1.5);
     const [rx, rz] = P(-Math.PI / 2, 10);
     racks.push(facing(rx + Math.round(Math.cos(G + Math.PI / 2)), rz + Math.round(Math.sin(G + Math.PI / 2)), rx, rz));

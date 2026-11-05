@@ -13,6 +13,7 @@ import type { Creature } from './creatures';
 import { fighterStats, type FighterKind, type NightDirector } from './night';
 import type { WarHost } from './war';
 import { BATTLE_CALLS, ROAD_BANTER, UP_CALLS, VICTORY_CALLS, exchange } from './banter';
+import { angleTo, direction, pick, rand, TAU } from './util';
 
 export interface RareHost extends WarHost {
   partySay(c: Creature, party: string, text: string): void;
@@ -41,6 +42,8 @@ const DEFS: RareDef[] = [
 ];
 /** Seconds between rare events. */
 const RARE_EVERY = 15 * 60;
+/** Seconds from the start of play to the first rare event. */
+const RARE_FIRST = 5 * 60;
 const PARTY_NAMES = ['Kayıp Loot', 'Gece Farmcıları', 'AFK Olmayanlar', 'Son Pot', 'Wipe Yok', 'Kritik Vuruş', 'Taze Respawn', 'Altın Kalkan'];
 
 export interface RareEvent {
@@ -56,27 +59,15 @@ export interface RareEvent {
   talkT: number;
   slamT: number;
   roarT: number;
-}
-
-const rand = (a: number, b: number) => a + Math.random() * (b - a);
-const pick = <T>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
-const TAU = Math.PI * 2;
-const angleTo = (from: number, to: number) => {
-  let d = (to - from) % TAU;
-  if (d > Math.PI) d -= TAU;
-  if (d < -Math.PI) d += TAU;
-  return d;
-};
-function direction(dx: number, dz: number): string {
-  const names = ['doğuda', 'güneydoğuda', 'güneyde', 'güneybatıda', 'batıda', 'kuzeybatıda', 'kuzeyde', 'kuzeydoğuda'];
-  return names[(Math.round(Math.atan2(dz, dx) / (Math.PI / 4)) + 8) % 8];
+  /** Wait before trying again after the beast or its party could not be spawned. */
+  retryT: number;
 }
 
 export class RareDirector {
   private events: RareEvent[] = [];
   /** The dance of dragons over (x, z), while the riders fight. */
   private duels: Array<{ x: number; z: number; a: Creature; b: Creature; t: number }> = [];
-  private nextT = RARE_EVERY;
+  private nextT = RARE_FIRST;
   private px = 0; private pz = 0;
 
   constructor(private terrain: Terrain, private host: RareHost, private night: NightDirector) {}
@@ -107,8 +98,11 @@ export class RareDirector {
     this.duels = this.duels.filter((d) => d.t > 0 && (this.host.dueling(d.a) || this.host.dueling(d.b)));
     for (const e of this.events) {
       e.t -= dt;
+      e.retryT -= dt;
       const d = Math.hypot(e.x - px, e.z - pz);
-      if (e.state !== 'won' && d < 110 && !e.boss) this.materialise(e);
+      if (e.state !== 'won' && d < 110 && !e.boss && e.retryT <= 0) this.materialise(e);
+      // Check for the kill before the far check below, which would drop a dying beast unrewarded.
+      if (e.boss && (e.boss.dying > 0 || e.boss.fighter!.hp <= 0) && e.state !== 'won') this.victory(e);
       if (e.boss && (e.boss.gone || d > 230)) {
         // The player went away: the fight pauses (the beast keeps its wounds).
         if (!e.boss.gone && e.boss.dying === 0) e.hp = e.boss.fighter!.hp;
@@ -116,8 +110,7 @@ export class RareDirector {
         if (e.state === 'fight') e.state = 'waiting';
       }
       e.party = e.party.filter((c) => !c.gone);
-      if (e.boss && e.boss.dying > 0 && e.state !== 'won') this.victory(e);
-      if (e.state !== 'won' && e.party.length === 0 && e.boss && d < 110) this.spawnParty(e);
+      if (e.state !== 'won' && e.party.length === 0 && e.boss && d < 110 && e.retryT <= 0) this.spawnParty(e);
       this.chatter(e, dt);
     }
     this.events = this.events.filter((e) => e.t > 0 || (e.boss && !e.boss.gone && e.state !== 'won'));
@@ -129,7 +122,7 @@ export class RareDirector {
     const def = pick(DEFS);
     const e: RareEvent = {
       def, x: spot[0], z: spot[1], t: 600, state: 'waiting', hp: def.hp, boss: null, party: [],
-      partyName: pick(PARTY_NAMES), talkT: rand(6, 10), slamT: rand(8, 12), roarT: 4,
+      partyName: pick(PARTY_NAMES), talkT: rand(6, 10), slamT: rand(8, 12), roarT: 4, retryT: 0,
     };
     this.events.push(e);
     const d = Math.hypot(e.x - this.px, e.z - this.pz);
@@ -177,7 +170,7 @@ export class RareDirector {
 
   private materialise(e: RareEvent): void {
     const c = this.spawnNear(e.def.kind, e.x + 0.5, e.z + 0.5);
-    if (!c) return;
+    if (!c) { e.retryT = 2; return; }
     const f = c.fighter!;
     f.rare = e;
     f.hp = e.hp; f.max = e.def.hp;
@@ -201,6 +194,8 @@ export class RareDirector {
       c.fighter!.rare = e;
       e.party.push(c);
     }
+    // No room for adventurers just now (night parties fill the slots): each try scans many columns.
+    if (!e.party.length) e.retryT = 3;
     e.talkT = 3;
   }
 
@@ -382,7 +377,7 @@ export class RareDirector {
     if (near) {
       const def = pick(DEFS);
       const a = Math.random() * TAU;
-      this.events.push({ def, x: Math.round(this.px + Math.cos(a) * 30), z: Math.round(this.pz + Math.sin(a) * 30), t: 600, state: 'waiting', hp: hp || def.hp, boss: null, party: [], partyName: pick(PARTY_NAMES), talkT: 5, slamT: 10, roarT: 3 });
+      this.events.push({ def, x: Math.round(this.px + Math.cos(a) * 30), z: Math.round(this.pz + Math.sin(a) * 30), t: 600, state: 'waiting', hp: hp || def.hp, boss: null, party: [], partyName: pick(PARTY_NAMES), talkT: 5, slamT: 10, roarT: 3, retryT: 0 });
       this.host.announce('NADİR YARATIK', `${def.name} göründü!`, 'hemen yanında!');
       return `${def.name} near`;
     }

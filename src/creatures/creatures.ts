@@ -21,8 +21,8 @@ import { OrcDirector } from './orcs';
 import { WatchDirector } from './watch';
 import { RareDirector } from './rare';
 import { nick } from './banter';
+import { angleTo, rand, TAU } from './util';
 
-const TAU = Math.PI * 2;
 const DESPAWN = 104;
 /** Ridden war dragons (the dance of dragons). */
 const RIDER_DRAGON = 'riderdragon';
@@ -148,15 +148,8 @@ export type DragonMode = 'fly' | 'breathe' | 'sleep' | 'ground';
 /** What a landing dragon does once down. */
 const enum I { PERCH, SLEEP, FEED }
 
-const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const pickOf = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 const CHAR = new THREE.Color(0.06, 0.05, 0.05);
-const angleTo = (from: number, to: number) => {
-  let d = (to - from) % TAU;
-  if (d > Math.PI) d -= TAU;
-  if (d < -Math.PI) d += TAU;
-  return d;
-};
 
 export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
   readonly group = new THREE.Group();
@@ -270,7 +263,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
       for (let i = list.length - 1; i >= 0; i--) {
         const c = list[i];
         const h = rt.def.habitat;
-        const far = Math.hypot(c.x - px, c.z - pz) > (h === 'wyrm' ? 340 : h === 'dragon' ? (rt.def.name === RIDER_DRAGON ? 420 : 260) : h === 'npc' ? 240 : h === 'hero' || h === 'orc' ? 200 : h === 'monster' ? (c.fighter?.rare ? 260 : 120) : DESPAWN);
+        const far = Math.hypot(c.x - px, c.z - pz) > (h === 'wyrm' ? 340 : h === 'dragon' ? (rt.def.name === RIDER_DRAGON ? 420 : 260) : h === 'npc' ? 240 : h === 'hero' ? 200 : h === 'orc' ? 260 : h === 'monster' ? (c.fighter?.rare ? 260 : 120) : DESPAWN);
         const wrongTime = (rt.def.time === -1 && night < 0.3) || (rt.def.time === 1 && night > 0.75);
         const alive = c.dying > 0 ? (c.fighter ? this.nightDir.stepDying(c, dt) : this.stepDying(c, dt))
           : !(far || (wrongTime && Math.random() < dt * 0.2) || !this.step(rt.def, c, dt, night));
@@ -1207,7 +1200,10 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
     let d = rt.list.find((c) => (c.state === S.CIRCLE || c.state === S.CLIMB) && Math.hypot(c.x - x, c.z - z) < 300) ?? null;
     if (!d) {
       if (rt.list.length >= rt.def.max) return null;
-      const a = Math.random() * TAU;
+      // Sweep in from afar, but never so far from the player that it despawns (260) at once.
+      let a = Math.random() * TAU;
+      for (let k = 0; k < 8 && Math.hypot(x + Math.cos(a) * 170 - this.px, z + Math.sin(a) * 170 - this.pz) > 220; k++) a = Math.random() * TAU;
+      if (Math.hypot(x + Math.cos(a) * 170 - this.px, z + Math.sin(a) * 170 - this.pz) > 220) a = Math.atan2(this.pz - z, this.px - x);
       const sx = x + Math.cos(a) * 170, sz = z + Math.sin(a) * 170;
       d = this.make(this.species.indexOf(rt), sx, y + 40, sz, new THREE.Color(pickOf(rt.def.tints)), rt.def);
       rt.list.push(d);
