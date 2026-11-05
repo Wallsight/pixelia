@@ -242,6 +242,28 @@ body.menu #quests, body.map-open #quests, body.menu #quest-dialog { visibility: 
 #records .board tr.me td { color: #ffd77a; }
 #records .hint { margin: 8px 0 0; font-size: 11px; color: #8f84a6; text-align: center; }
 
+/* The counter: wares, prices, what the trader says. */
+#shop {
+  position: fixed; left: 50%; bottom: 12%; transform: translateX(-50%); z-index: 7; width: min(520px, calc(100vw - 32px));
+  font: 14px/1.4 "Cascadia Mono", Consolas, monospace; color: #f4ead8;
+  background: rgba(20, 14, 28, 0.94); border: 3px solid #000; box-shadow: 4px 4px #000; padding: 12px 14px;
+}
+#shop.hidden { display: none; }
+#shop .who { color: #ffd77a; font-weight: bold; letter-spacing: 1px; margin-bottom: 6px; }
+#shop .ware { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 10px; margin: 6px 0; }
+#shop .ware .text { grid-column: 1 / -1; color: #b8aec8; font-size: 12px; }
+#shop .ware.off button { filter: grayscale(0.8) brightness(0.7); cursor: default; }
+#shop .price { color: #ffe08a; }
+#shop .say { margin: 8px 0; color: #e8e0f0; }
+#shop button { font: bold 14px "Cascadia Mono", Consolas, monospace; padding: 5px 10px; text-align: left; }
+#shop .key { display: inline-block; background: #ffd77a; color: #2b1d33; padding: 0 5px; margin-right: 6px; }
+#shop .row .key { margin: 0 0 0 6px; }
+#shop .coin { display: inline-block; width: 8px; height: 8px; margin-right: 5px; background: #ffd24a; border: 2px solid #8a6418; transform: rotate(45deg); }
+/* Well fed, boots: under the purse. */
+#buffs { position: fixed; right: 12px; top: 84px; z-index: 5; pointer-events: none; font: bold 12px "Cascadia Mono", Consolas, monospace; color: #9ae07a; text-shadow: 1px 1px #000; }
+body.touch #buffs { top: auto; bottom: max(100px, calc(env(safe-area-inset-bottom) + 94px)); right: max(12px, env(safe-area-inset-right)); }
+body.menu #shop, body.menu #buffs, body.map-open #buffs { visibility: hidden; }
+
 /* The interact prompt (keyboard), just under the crosshair. */
 #interact {
   position: fixed; left: 50%; top: calc(50% + 34px); transform: translateX(-50%); z-index: 5; pointer-events: none;

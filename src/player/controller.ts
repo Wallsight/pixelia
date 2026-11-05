@@ -29,6 +29,8 @@ export class PlayerController {
   onGround = false;
   inWater = false;
   flying = false;
+  /** Walking/running speed multiplier (boots, a full stomach). */
+  speedBoost = 1;
   locked = false;
   /** True while an overlay (map) owns the mouse and keyboard. */
   paused = false;
@@ -226,7 +228,7 @@ export class PlayerController {
         }
       }
     } else {
-      const speed = this.inWater ? WALK * 0.6 : sprint ? SPRINT : WALK;
+      const speed = (this.inWater ? WALK * 0.6 : sprint ? SPRINT : WALK) * this.speedBoost;
       const accel = this.onGround ? 14 : this.inWater ? 6 : 3.5;
       const blend = Math.min(1, accel * dt);
       v.x += (wx * speed - v.x) * blend;

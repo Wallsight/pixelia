@@ -12,7 +12,7 @@ import { hash01 } from '../engine/noise';
 import { LM, SITE_CASTLE, SITE_CITY, SITE_ORC, SITE_VILLAGE, pointAlong, polylineLength, type Site } from '../world/structures';
 import { castleHouse } from '../world/castle';
 import { frontLayout } from '../world/front';
-import { homeSpots, villageLayout, workSpotWorld, type House, type HouseKind, type Layout, type Spot } from '../world/village';
+import { customerWay, homeSpots, villageLayout, workSpotWorld, type House, type HouseKind, type Layout, type Spot } from '../world/village';
 import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
 import { direction, pick, rand } from './util';
@@ -42,6 +42,8 @@ export interface NpcState {
   owl: boolean;
   /** Discovery id of the place the current gossip is about. */
   rumor?: string | null;
+  /** In a shop as a customer: the house (to walk out through its door). */
+  inside?: House;
   /** Travellers: road polyline, distance, direction. */
   road: Float32Array | null;
   s: number;
@@ -110,6 +112,13 @@ const TRADE: Partial<Record<HouseKind, string[]>> = {
 /** Who lives (and sleeps) in the homes. */
 const HOMEBODY = new Set<Role>(['villager', 'elder', 'farmer', 'kid']);
 const HOME = ['Çorba neredeyse hazır.', 'Şu ocak yine tütüyor...', 'Ekmek bayatlamış, fırına uğramalı.', 'Pencereyi kim açık bıraktı?', 'Biraz dinleneyim.', 'Yarın pazara gideceğim.'];
+/** Customers at a counter indoors, by trade (customer, trader, customer). */
+const BUY_IN: Partial<Record<HouseKind, string[][]>> = {
+  shop: [['Bir kangal ip lazım.', 'Buyur, en sağlamından.', 'Sağ ol!'], ['Mum var mı?', 'Var, balmumundan.', 'İki tane alayım.']],
+  bakery: [['Taze ekmek var mı?', 'Fırından yeni çıktı!', 'Kokusu sokağa yayılmış!'], ['Bir simit lütfen.', 'Susamlı mı olsun?', 'Bol susamlı!']],
+  smithy: [['Atımın nalı düştü.', 'Getir, hemen çakarım.', 'Eline sağlık usta.'], ['Bıçağımı biler misin?', 'Kıl gibi keser, bak.', 'Sağ ol usta!']],
+  inn: [['Bir çorba ver bakalım.', 'Mercimek mi ezogelin mi?', 'Ezogelin olsun!'], ['Ozan bu akşam çalacak mı?', 'Her akşam çalar.', 'Gelirim o zaman.']],
+};
 const CALLS = ['Taze ekmek, sıcak ekmek!', 'Kumaşlar, baharatlar!', 'Elmalar tatlı, armutlar ballı!', 'Gel vatandaş, gel!', 'Bugün indirim var!'];
 const KIDS = ['Ebe sensin!', 'Yakalayamazsın!', 'Hahaha!', 'Bekle beni!', 'Sobe!'];
 const GUARD = ['Her şey yolunda.', 'Gözüm üstünüzde.', 'Ejderha görünürse çanı çalın!'];
@@ -350,6 +359,22 @@ export class NpcDirector {
     });
   }
 
+  /** Dev: a villager steps up to the door of the indoor shop nearest (x, z) and goes in to buy. */
+  devShopper(x: number, z: number): string {
+    const town = [...this.towns.values()].find((t) => t.active);
+    if (!town) return 'no town';
+    const m = town.residents.filter((o) => o.stall?.inside && o.stall.inside !== 'hall' && o.home)
+      .sort((a, b) => Math.hypot(a.home!.doorX - x, a.home!.doorZ - z) - Math.hypot(b.home!.doorX - x, b.home!.doorZ - z))[0];
+    const c = this.host.allNpcs().find((o) => o.npc?.role === 'villager' && o.npc.town === town && !o.npc.inside);
+    if (!m || !c) return 'none';
+    const h = m.home!, way = customerWay(h)!, n = c.npc!;
+    if (n.partner) this.endTalk(c);
+    c.x = h.doorX + 0.5 + h.fx * 2; c.z = h.doorZ + 0.5 + h.fz * 2;
+    n.stall = m.stall; n.inside = h;
+    n.route = [h.doorX + 0.5, h.doorZ + 0.5, way.door[0], way.door[1], way.spot[0], way.spot[1]]; n.ri = 0; n.task = 'walk'; n.next = 'buy'; n.stuck = 0;
+    return `${h.kind} door ${h.doorX},${h.doorZ} spot ${way.spot.map((v) => v.toFixed(1))}`;
+  }
+
   madInfo(): string {
     const mad = this.host.allNpcs().filter((c) => c.npc?.role === 'mad' && !c.npc.remove);
     const town = [...this.towns.values()].find((t) => t.L.city);
@@ -479,7 +504,8 @@ export class NpcDirector {
       if (r.creature && r.creature.npc?.remove) r.creature = null;
       // Those not (yet) mad live as ordinary villagers.
       const role: Role = r.role === 'mad' && (r.madRank ?? 0) >= this.madCount ? 'villager' : r.role;
-      const nightOwl = role === 'guard' || role === 'mad' || (role === 'villager' && Math.floor(r.seed) % 7 === 0);
+      // The innkeeper keeps the inn open at night.
+      const nightOwl = role === 'guard' || role === 'mad' || r.stall?.inside === 'inn' || (role === 'villager' && Math.floor(r.seed) % 7 === 0);
       if (role === 'mad') r.asleep = false; // the mad do not sleep
       const spots = r.home && HOMEBODY.has(r.role) ? homeSpots(r.home, this.terrain.seed) : null;
       const homeNear = !!spots && Math.hypot(r.home!.doorX - this.player.x, r.home!.doorZ - this.player.z) < 30;
@@ -657,7 +683,7 @@ export class NpcDirector {
     const n = c.npc!;
     if (n.partner) this.endTalk(c);
     const home = n.res?.home;
-    if (!home || n.stall?.inside) { n.remove = true; return; }
+    if (!home || n.stall?.inside || n.inside) { n.remove = true; return; }
     this.go(c, home.doorX + 0.5, home.doorZ + 0.5, 'home');
   }
 
@@ -813,6 +839,11 @@ export class NpcDirector {
     const L = town.L;
     if (night > 0.55 && !n.owl) { this.goHome(c); return; }
     if (n.stall?.inside) { n.task = 'sell'; this.arrive(c); return; }
+    if (n.inside) {
+      const h = n.inside, way = customerWay(h);
+      n.inside = undefined;
+      if (way) { n.route = [way.door[0], way.door[1], h.doorX + 0.5, h.doorZ + 0.5]; n.ri = 0; n.task = 'walk'; n.next = 'idle'; n.stuck = 0; return; }
+    }
     const sq = () => {
       const a = Math.random() * Math.PI * 2, r = L.city ? rand(L.plazaR - 5, L.plazaR - 1.5) : rand(3.4, L.plazaR + 1);
       return [L.site.x + Math.cos(a) * r, L.site.z + Math.sin(a) * r];
@@ -879,6 +910,20 @@ export class NpcDirector {
       n.stall = s;
       this.go(c, s.x + 0.5 + s.fx * 1.4, s.z + 0.5 + s.fz * 1.4, 'buy');
       return;
+    }
+    // Into a shop, the bakery, the smithy or the inn, to buy at the counter.
+    if (r < 0.74) {
+      const inner = town.residents.filter((o) => o.stall?.inside && o.stall.inside !== 'hall' && o.home && o.creature && !o.creature.npc?.remove);
+      if (inner.length) {
+        const m = pick(inner), h = m.home!, way = customerWay(h);
+        if (way && !this.host.allNpcs().some((o) => o.npc?.inside === h)) {
+          n.stall = m.stall;
+          this.go(c, h.doorX + 0.5, h.doorZ + 0.5, 'buy');
+          n.route.push(way.door[0], way.door[1], way.spot[0], way.spot[1]);
+          n.inside = h;
+          return;
+        }
+      }
     }
     if (r < 0.8 && L.houses.length) {
       const h = pick(L.houses);
@@ -962,7 +1007,7 @@ export class NpcDirector {
     n.s += dt;
     if (s) this.face(c, { x: s.x + 0.5, z: s.z + 0.5 }, dt);
     const merchant = this.host.allNpcs().find((o) => o.npc?.task === 'sell' && o.npc.stall === s && Math.hypot(o.x - c.x, o.z - c.z) < 4);
-    if (!n.lines.length) { n.lines = pick(SELL).slice(); n.li = -1; n.s = 0; }
+    if (!n.lines.length) { n.lines = pick((s?.inside && BUY_IN[s.inside]) || SELL).slice(); n.li = -1; n.s = 0; }
     const turn = Math.floor(n.s / 3);
     if (turn !== n.li && turn < n.lines.length) {
       n.li = turn;

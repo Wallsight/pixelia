@@ -84,6 +84,16 @@ export class Discovery {
 
   get total(): number { return this.found.size; }
 
+  /** Lift the fog in a circle (a bought map piece). */
+  reveal(x: number, z: number, r: number): void {
+    const c0 = Math.floor(x / FOG_CELL), cz0 = Math.floor(z / FOG_CELL), n = Math.ceil(r / FOG_CELL);
+    for (let dz = -n; dz <= n; dz++) for (let dx = -n; dx <= n; dx++) {
+      if ((dx * dx + dz * dz) * FOG_CELL * FOG_CELL > r * r) continue;
+      const k = key(c0 + dx, cz0 + dz);
+      if (!this.seen.has(k)) { this.seen.add(k); this.version++; this.dirty = true; }
+    }
+  }
+
   update(dt: number, px: number, pz: number): void {
     this.timer -= dt;
     if (this.timer <= 0) {

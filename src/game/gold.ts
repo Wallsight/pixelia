@@ -63,7 +63,7 @@ export class GoldDirector {
     heap: new THREE.BoxGeometry(0.7, 0.12, 0.42),
   };
   /** Gold changed: amount added and the new total. */
-  onGold: ((added: number, total: number, kind: Kind | 'quest', where: string) => void) | null = null;
+  onGold: ((added: number, total: number, kind: Kind | 'quest' | 'spend', where: string) => void) | null = null;
 
   constructor(private terrain: Terrain, private world: BlockReader, env: EnvUniforms, shadows: boolean) {
     this.key = `pixelia-gold-${terrain.seed}`;
@@ -83,6 +83,31 @@ export class GoldDirector {
 
   private save(): void {
     try { localStorage.setItem(this.key, JSON.stringify({ stats: this.stats, taken: [...this.taken] })); } catch { /* storage blocked */ }
+  }
+
+  spend(amount: number): void {
+    this.stats.gold = Math.max(0, this.stats.gold - amount);
+    this.save();
+    this.onGold?.(-amount, this.stats.gold, 'spend', '');
+  }
+
+  isTaken(id: string): boolean { return this.taken.has(id); }
+
+  /** The nearest chest not yet opened (for the treasure map), out to R blocks. */
+  nearestChest(px: number, pz: number, R = 900): { id: string; x: number; z: number } | null {
+    const t = this.terrain, seed = t.seed;
+    let best: { id: string; x: number; z: number } | null = null, bd = Infinity;
+    const consider = (id: string, x: number, z: number) => {
+      if (this.taken.has(id)) return;
+      const d = Math.hypot(x - px, z - pz);
+      if (d < bd && d > 12) { bd = d; best = { id, x, z }; }
+    };
+    for (const lm of t.landmarks.near(px - R, pz - R, px + R, pz + R, 0)) {
+      const a = hash01(lm.gx, 7310, lm.gz, seed) * Math.PI * 2, d = 7 + hash01(lm.gx, 7311, lm.gz, seed) * 4;
+      consider(`c:l:${lm.id}`, lm.x + Math.cos(a) * d, lm.z + Math.sin(a) * d);
+    }
+    for (const s of t.structures.sitesNear(px - R, pz - R, px + R, pz + R, 0)) if (s.kind === SITE_CASTLE && !s.held) consider(`c:s:${s.id}`, s.x + 2.5, s.z - 1.5);
+    return best;
   }
 
   /** Quest rewards and the like. */

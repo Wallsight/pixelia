@@ -22,6 +22,8 @@ import { GoldDirector } from './game/gold';
 import { Interact } from './ui/interact';
 import { QuestDirector } from './game/quests';
 import { Records } from './ui/records';
+import { Shop } from './game/shop';
+import { LANDMARK_NAMES } from './ui/discovery';
 import { Subtitle } from './ui/subtitle';
 import { PartyChat } from './ui/partychat';
 import { Compass } from './ui/compass';
@@ -142,7 +144,7 @@ creatures.wyrm.onSpeak = (who, text, sec, asleep) => subtitle.show(who, text, se
 const partyChat = new PartyChat();
 creatures.onPartyChat = (party, who, text) => partyChat.post(party, who, text);
 creatures.onAnnounce = (kicker, title, sub) => discovery.announce(kicker, title, sub);
-worldMap.markers = () => [...creatures.rare.markers(), ...creatures.front.markers(), ...quests.markers()];
+worldMap.markers = () => [...creatures.rare.markers(), ...creatures.front.markers(), ...quests.markers(), ...(shop.chest ? [{ x: shop.chest.x, z: shop.chest.z, label: 'Hazine', done: false, icon: '✕' }] : [])];
 const compass = new Compass();
 // Always on screen (desktop): the map key, clickable too.
 const mapHint = document.createElement('button');
@@ -274,6 +276,7 @@ const showGold = (bump: boolean): void => {
 showGold(false);
 gold.onGold = (added, _total, kind, where) => {
   showGold(true);
+  if (kind === 'spend') return;
   sound.jingle(kind === 'pouch' ? 'coin' : 'chest');
   if (kind === 'chest') discovery.notice('HAZİNE', `+${added} altın · ${where}`);
 };
@@ -289,6 +292,39 @@ quests.onTalk = (c) => {
   if (c.npc) { c.npc.task = 'idle'; c.npc.t = 8; c.npc.route = []; }
 };
 interact.add((px, py, pz) => quests.candidate(px, py, pz));
+// Spending: whoever works behind a counter sells something.
+const shop = new Shop(SEED, {
+  gold: () => gold.stats.gold,
+  spend: (n) => gold.spend(n),
+  mapPiece: () => {
+    const px = player.position.x, pz = player.position.z, R = 1500;
+    const lm = terrain.landmarks.near(px - R, pz - R, px + R, pz + R, 0)
+      .filter((m) => !discovery.found.has(`l:${m.id}`) && !discovery.rumors.has(`l:${m.id}`))
+      .sort((a, b) => Math.hypot(a.x - px, a.z - pz) - Math.hypot(b.x - px, b.z - pz))[0];
+    if (!lm) return null;
+    discovery.rumor(`l:${lm.id}`);
+    discovery.reveal(lm.x, lm.z, 70);
+    return LANDMARK_NAMES[lm.kind] ?? 'eski bir yer';
+  },
+  night: () => daynight.night,
+  sleep: () => { daynight.time = 7 / 24; },
+  treasure: () => gold.nearestChest(player.position.x, player.position.z),
+  notice: (k, t) => discovery.notice(k, t),
+  sound: () => sound.jingle('coin'),
+}, TOUCH);
+/** Where the player stood when the counter opened (walking off closes it). */
+let shopAt: [number, number] = [0, 0];
+const buffs = document.createElement('div');
+buffs.id = 'buffs';
+document.body.appendChild(buffs);
+interact.add((px, py, pz) => {
+  for (const c of creatures.allNpcs()) {
+    const kind = c.npc?.stall?.inside;
+    if (!kind || c.npc!.task !== 'sell' || !shop.sells(kind) || Math.hypot(c.x - px, c.z - pz) > 3.2 || Math.abs(c.y - py) > 2) continue;
+    return { x: c.x, y: c.y, z: c.z, label: 'Alışveriş', act: () => { shopAt = [px, pz]; shop.show(kind); } };
+  }
+  return null;
+});
 interact.add((px, py, pz) => {
   const c = gold.chestNear(px, py, pz);
   return c && { x: c.x, y: c.y, z: c.z, label: 'Sandığı aç', act: c.open };
@@ -339,8 +375,9 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyT' && player.locked) toggleTime();
   if (e.code === 'KeyM' && (player.locked || worldMap.open)) toggleMap();
   if (e.code === 'KeyC' && worldMap.open) worldMap.recenter();
-  if (e.code === 'KeyE' && player.locked && !worldMap.open) { if (quests.asking) quests.accept(); else interact.trigger(); }
-  if (e.code === 'KeyQ' && quests.asking) quests.decline();
+  if (e.code === 'KeyE' && player.locked && !worldMap.open) { if (shop.open) shop.close(); else if (quests.asking) quests.accept(); else interact.trigger(); }
+  if (e.code === 'KeyQ') { if (shop.open) shop.close(); else if (quests.asking) quests.decline(); }
+  if (shop.open && /^Digit[1-9]$/.test(e.code)) shop.key1(Number(e.code.slice(5)) - 1);
   // N: sound on/off, B: music on/off.
   if (e.code === 'KeyN' && player.locked) toggleSound();
   if (e.code === 'KeyB' && player.locked) {
@@ -472,7 +509,7 @@ function step(): void {
           return 'ok';
         };
         (window as unknown as Record<string, unknown>).__role = (role: string) => creatures.allNpcs().filter((c) => c.npc?.role === role)
-          .map((c) => ({ task: c.npc!.task, next: c.npc!.next, ri: c.npc!.ri, route: c.npc!.route.length / 2, at: [Math.round(c.x), Math.round(c.z)] }));
+          .map((c) => ({ task: c.npc!.task, next: c.npc!.next, ri: c.npc!.ri, route: c.npc!.route.length / 2, at: [Math.round(c.x), Math.round(c.z)], inside: c.npc!.inside?.kind ?? null }));
         // Dev: 'add' turns one more of the city's folk mad, 'stare'/'preach'/'chant' puts them to it at x, z; else where they are.
         (window as unknown as Record<string, unknown>).__mad = (what = 'info', x = 0, z = 0) => {
           if (what === 'add') creatures.npcs.addMad();
@@ -484,6 +521,13 @@ function step(): void {
           player.position.set(x, y, z); player.velocity.set(0, 0, 0);
           player.yaw = (yaw * Math.PI) / 180; player.pitch = (pitch * Math.PI) / 180;
           return 'ok';
+        };
+        (window as unknown as Record<string, unknown>).__shopper = () => creatures.npcs.devShopper(player.position.x, player.position.z);
+        // Dev: open a trade's counter and buy ware i (with 500 gold to spend the first time).
+        (window as unknown as Record<string, unknown>).__shop = (kind: 'shop' | 'bakery' | 'inn' | 'smithy' | 'hall', i = -1) => {
+          if (gold.stats.gold < 300) gold.add(500, 'dev');
+          shopAt = [player.position.x, player.position.z]; shop.show(kind); if (i >= 0) shop.buy(i);
+          return `gold ${gold.stats.gold} boots ${shop.boots} fed ${Math.round(shop.fed)} chest ${shop.chest ? `${Math.round(shop.chest.x)},${Math.round(shop.chest.z)}` : '-'} speed ${player.speedBoost} hour ${daynight.clock()} | ${document.querySelector('#shop .say')?.textContent}`;
         };
         (window as unknown as Record<string, unknown>).__pause = () => { pauseUnlocked(); return 'paused'; };
         (window as unknown as Record<string, unknown>).__gold = () => gold.info(player.position.x, player.position.z);
@@ -534,9 +578,17 @@ function step(): void {
   if (spawned) {
     camera.getWorldDirection(camFwd);
     eldritch.update(dt, camera.position, camFwd, daynight.night, focusSample);
-    doors.update(dt, player.position.x, player.position.z);
+    doors.update(dt, player.position.x, player.position.z, creatures.allNpcs());
     gold.update(dt, player.position.x, player.position.y, player.position.z);
     quests.update(dt, player.position.x, player.position.y, player.position.z);
+    shop.update(dt);
+    player.speedBoost = shop.speed;
+    if (shop.chest && gold.isTaken(shop.chest.id)) shop.chestTaken();
+    // Walking away closes the counter.
+    if (shop.open && Math.hypot(player.position.x - shopAt[0], player.position.z - shopAt[1]) > 4) shop.close();
+    const fed = shop.fed > 0 ? `Tok ${Math.floor(shop.fed / 60)}:${String(Math.floor(shop.fed % 60)).padStart(2, '0')}` : '';
+    const buffText = [fed, shop.boots ? 'Nallı çizme' : ''].filter(Boolean).join(' · ');
+    if (buffs.textContent !== buffText) buffs.textContent = buffText;
     if (player.locked) {
       records.time += dt;
       // Now and then, so a closed tab keeps most of it.
@@ -556,7 +608,7 @@ function step(): void {
   shadows?.render(renderer, scene, camera.position, daynight.lightDir, daynight.shadowStrength);
   renderer.render(scene, camera);
   worldMap.draw(player.position.x, player.position.z, player.yaw);
-  compass.update(player.yaw, player.position.x, player.position.z, [...creatures.rare.markers(), ...creatures.front.markers(), ...quests.markers()], creatures.rare.nextIn);
+  compass.update(player.yaw, player.position.x, player.position.z, [...creatures.rare.markers(), ...creatures.front.markers(), ...quests.markers(), ...(shop.chest ? [{ x: shop.chest.x, z: shop.chest.z, label: 'Hazine', done: false, icon: '✕' }] : [])], creatures.rare.nextIn);
 
   frames++;
   fpsTime += dt;

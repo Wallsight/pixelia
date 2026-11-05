@@ -666,6 +666,15 @@ export function workSpot(h: House): [number, number] | null {
   }
 }
 
+/** Inside a house, from the street: the cell in the doorway and where a customer stands before the counter (world, cell centres). */
+export function customerWay(h: House): { door: [number, number]; spot: [number, number] } | null {
+  const w = workSpot(h);
+  if (!w) return null;
+  const rx = -h.fz, rz = h.fx;
+  const W = (lx: number, lz: number): [number, number] => [h.cx + lx * rx + lz * h.fx + 0.5, h.cz + lx * rz + lz * h.fz + 0.5];
+  return { door: W(0, h.hd), spot: W(w[0], Math.min(h.hd - 1, w[1] + 2)) };
+}
+
 /** A work spot in world coordinates (cell centre) and the facing (towards the door). */
 export function workSpotWorld(h: House): { x: number; z: number; y: number; fx: number; fz: number } | null {
   const w = workSpot(h);

@@ -1,6 +1,6 @@
 // Doors of the village and city houses: the doorways in the voxel plan are
 // open, and a plank leaf on a hinge stands in each. A door swings inwards when
-// the player comes close and closes again behind them. Only the doors of the
+// the player (or a villager) comes close and closes again behind them. Only the doors of the
 // settlements around the player exist.
 
 import * as THREE from 'three';
@@ -38,11 +38,13 @@ export class DoorDirector {
     this.brass = createPropMaterial(env, { color: '#d8b04a', shadows });
   }
 
-  update(dt: number, px: number, pz: number): void {
+  /** others: villagers about (they open doors too). */
+  update(dt: number, px: number, pz: number, others: ReadonlyArray<{ x: number; z: number }> = []): void {
     this.scan -= dt;
     if (this.scan <= 0) { this.scan = 1; this.refresh(px, pz); }
     for (const d of this.doors.values()) {
-      const want = Math.hypot(d.x - px, d.z - pz) < OPEN_AT ? 1 : 0;
+      const near = (o: { x: number; z: number }) => Math.abs(d.x - o.x) < 1.6 && Math.abs(d.z - o.z) < 1.6;
+      const want = Math.hypot(d.x - px, d.z - pz) < OPEN_AT || others.some(near) ? 1 : 0;
       if (d.angle === want) continue;
       d.angle = want > d.angle ? Math.min(want, d.angle + dt * 3) : Math.max(want, d.angle - dt * 2);
       d.swing.rotation.y = -d.angle * (Math.PI / 2) * 0.95;
