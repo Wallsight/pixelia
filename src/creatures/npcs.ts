@@ -3,7 +3,9 @@
 // the stalls, working the fields, visiting neighbours; children play tag,
 // guards patrol with lanterns, travellers walk the roads. They talk to each
 // other (speech bubbles, overheard by the player) and gossip about places worth
-// finding. Nobody reacts to the player.
+// finding. In the city a few have gone mad from what sleeps under the black
+// water: they stare towards it, preach on the square and chant at the city's
+// edge at night, and their number grows. Nobody reacts to the player.
 
 import * as THREE from 'three';
 import { hash01 } from '../engine/noise';
@@ -15,8 +17,9 @@ import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
 import { direction, pick, rand } from './util';
 
-export type Role = 'villager' | 'farmer' | 'merchant' | 'elder' | 'guard' | 'kid' | 'traveler' | 'bard' | 'crier';
-type Task = 'idle' | 'walk' | 'chat' | 'work' | 'sell' | 'buy' | 'visit' | 'play' | 'patrol' | 'travel' | 'home' | 'perform' | 'listen' | 'announce' | 'fight';
+export type Role = 'villager' | 'farmer' | 'merchant' | 'elder' | 'guard' | 'kid' | 'traveler' | 'bard' | 'crier' | 'mad';
+type Task = 'idle' | 'walk' | 'chat' | 'work' | 'sell' | 'buy' | 'visit' | 'play' | 'patrol' | 'travel' | 'home' | 'perform' | 'listen' | 'announce' | 'fight'
+  | 'stare' | 'preach' | 'chant';
 
 export interface NpcState {
   role: Role;
@@ -53,10 +56,16 @@ interface Resident {
   asleep: boolean;
   wake: number;
   stall: Spot | null;
+  /** City folk who go mad, in order: the first `madCount` of them are. */
+  madRank?: number;
 }
 
 interface Gossip { text: string; id: string | null }
-interface Town { site: Site; L: Layout; residents: Resident[]; ring: number; junctions: Array<{ ringS: number; street: number; s: number }>; active: boolean; gossip: Gossip[] }
+interface Town {
+  site: Site; L: Layout; residents: Resident[]; ring: number; junctions: Array<{ ringS: number; street: number; s: number }>; active: boolean; gossip: Gossip[];
+  /** The sunken temple the mad stare towards (its discovery id), if one lies within reach. */
+  temple: { x: number; z: number; id: string } | null;
+}
 
 export interface NpcHost {
   spawnNpc(role: Role, x: number, z: number, seed: number): Creature | null;
@@ -171,6 +180,31 @@ function gossipFor(t: Terrain, site: Site): Gossip[] {
   }
   return out;
 }
+// The mad: muttering, preaching, the night chant (an invented tongue), and what the others say.
+const MAD_MUTTER = [
+  'Gözü gördüm... suyun altında... açıktı...', 'Uyuyan uyanacak. Uyuyan uyanacak. Uyuyan...', 'Ufuktaki dev bana el salladı!',
+  'Saymayın yıldızları, yerleri yanlış!', 'Kara kumsalda şarkı söylüyorlar, duymuyor musunuz?', 'Köşeler... köşeler yanlış açılı...',
+  'Rüyamda bir şehir gördüm, kuleleri denizin dibinde.', 'Hehehe... balıklar da biliyor.',
+];
+const MAD_PREACH = [
+  'Dinleyin! Derinlerde biri bekliyor!', 'Göz açıldığında hepimiz uyanacağız!', 'Kapılarınızı denize karşı kilitleyin!',
+  'Ben gördüm! Siz de göreceksiniz!', 'Tövbe edin! Su yükseliyor!',
+];
+const MAD_CHANT = ['Ul-thaqqa... ul-thaqqa...', 'Nghor vothun ul-thaqqa!', 'Derin olan bekler...', "Y'khaa thol... y'khaa thol...", 'Göz açılınca... göz açılınca...'];
+const MAD_REACT = [
+  'Zavallı... eskiden balıkçıydı.', 'Uzak dur ondan, bulaşırmış.', 'Yine başladı...', 'Kara kumsala gitmiş, ondan beri böyle.',
+  'Sus artık, çocukları korkutuyorsun!', 'Annem onun için dua ediyor.',
+];
+const GUARD_MAD = ['Hadi, evlerinize!', 'Yine mi siz? Dağılın!', 'Denize bakmayın öyle...', 'Bu gece de mi?'];
+const CHAT_MAD: string[][] = [
+  ['Değirmencinin oğlu da sayıklamaya başlamış.', 'Kara kumsala mı gitmiş?', 'Gitmiş. Gözü görmüş diyorlar.'],
+  ['Geceleri şehrin kıyısında toplanıyorlar.', 'Denize dönüp bir şeyler söylüyorlar...', 'Duymamak en iyisi.'],
+  ['Deliler çoğalıyor.', 'Muhafızlar ne yapsın?', 'Kimse denizin tarafına bakmasın.'],
+];
+const MAD_CRY = 'Bir kişi daha aklını yitirdi! Kara kumsala yaklaşmayın!';
+/** At most this many go mad. */
+const MAD_MAX = 4;
+
 const GOSSIP_REPLIES = ['Gerçekten mi? Bir gün gidip bakmalı.', 'Dedem de anlatırdı, inanmazdım.', 'Oraya gidenin aklı başından gidermiş!', 'Haritama işaretleyeyim.'];
 
 // ------------------------------------------------------------------ bubbles
@@ -262,8 +296,52 @@ export class NpcDirector {
   onRumor: ((id: string) => void) | null = null;
   /** Live news for the town crier (e.g. how many legends the traveller has found). */
   news: (() => string | null) | null = null;
+  /** How many of the city's folk have gone mad (grows at dawn now and then; kept per seed). */
+  madCount = 1;
+  /** A new one went mad since the last dawn: the crier says so. */
+  private madFresh = false;
+  private wasNight = false;
+  private time = 0;
+  private madKey: string;
 
-  constructor(private terrain: Terrain, private host: NpcHost) {}
+  constructor(private terrain: Terrain, private host: NpcHost) {
+    this.madKey = `pixelia-mad-${terrain.seed}`;
+    try {
+      const n = Number(localStorage.getItem(this.madKey));
+      if (n >= 1 && n <= MAD_MAX) this.madCount = Math.floor(n);
+    } catch { /* storage blocked */ }
+  }
+
+  /** One more of the city's folk loses their mind (dev, or now and then at dawn). */
+  addMad(): void {
+    if (this.madCount >= MAD_MAX) return;
+    this.madCount++;
+    this.madFresh = true;
+    // Whoever it is steps out again as one of the mad.
+    for (const town of this.towns.values()) for (const r of town.residents) {
+      if (r.madRank === this.madCount - 1 && r.creature?.npc) { r.creature.npc.remove = true; r.creature = null; }
+    }
+    try { localStorage.setItem(this.madKey, String(this.madCount)); } catch { /* storage blocked */ }
+  }
+
+  /** Dev: the mad of the given rank (or all) take up a task right at (x, z), side by side. */
+  devMad(task: 'stare' | 'preach' | 'chant', x: number, z: number): void {
+    const mad = this.host.allNpcs().filter((c) => c.npc?.role === 'mad' && !c.npc.remove);
+    mad.forEach((c, i) => {
+      const n = c.npc!;
+      c.x = x + i * 1.6; c.z = z;
+      n.route = []; n.ri = 0; n.task = task; n.partner = null;
+      this.arrive(c);
+      n.t = 120;
+    });
+  }
+
+  madInfo(): string {
+    const mad = this.host.allNpcs().filter((c) => c.npc?.role === 'mad' && !c.npc.remove);
+    const town = [...this.towns.values()].find((t) => t.L.city);
+    const v = town ? this.vigil(town, 0).map(Math.round).join(',') : '-';
+    return `mad ${this.madCount}/${MAD_MAX} vigil ${v} out ${mad.length}: ${mad.map((c) => `${c.npc!.task}${c.npc!.task === 'walk' ? '>' + c.npc!.next : ''}@${Math.round(c.x)},${Math.round(c.z)}`).join(' ')}`;
+  }
 
   get group(): THREE.Group { return this.bubbles.group; }
 
@@ -288,6 +366,14 @@ export class NpcDirector {
 
   update(dt: number, px: number, pz: number, night: number, cam: THREE.Vector3): void {
     this.player.set(px, 0, pz);
+    this.time += dt;
+    // Dawn: now and then another one has lost their mind overnight.
+    if (night > 0.7) this.wasNight = true;
+    if (this.wasNight && night < 0.3) {
+      this.wasNight = false;
+      this.madFresh = false;
+      if (Math.random() < 0.5) this.addMad();
+    }
     this.scan -= dt;
     if (this.scan <= 0) {
       this.scan = 1;
@@ -334,6 +420,8 @@ export class NpcDirector {
     for (let i = 0; i < (L.city ? 6 : 2); i++) add('guard', null, k++);
     // The city has a bard on the square and a town crier.
     if (L.city) { add('bard', pick(L.houses) ?? null, k++); add('crier', pick(L.houses) ?? null, k++); }
+    // City folk who will lose their minds, one after another.
+    if (L.city) for (let i = 0; i < MAD_MAX; i++) { add('mad', pick(L.houses) ?? null, k++); residents[residents.length - 1].madRank = i; }
     for (const h of L.houses) {
       if (h.kind === 'hall') continue;
       const n = h.kind === 'tall' || h.kind === 'inn' ? 2 : 1 + (hash01(h.cx, 3101, h.cz, seed) < 0.5 ? 1 : 0);
@@ -363,7 +451,11 @@ export class NpcDirector {
         junctions.push({ ringS: nearestS(rp, jx, jz), street: si, s: bs });
       });
     }
-    return { site, L, residents, ring, junctions, active: false, gossip: gossipFor(this.terrain, site) };
+    const R = 1600;
+    const tl = L.city ? this.terrain.landmarks.near(site.x - R, site.z - R, site.x + R, site.z + R, 0).filter((m) => m.kind === LM.SUNKEN_TEMPLE)
+      .sort((a, b) => Math.hypot(a.x - site.x, a.z - site.z) - Math.hypot(b.x - site.x, b.z - site.z))[0] : undefined;
+    const temple = tl ? { x: tl.x, z: tl.z, id: `l:${tl.id}` } : null;
+    return { site, L, residents, ring, junctions, active: false, gossip: gossipFor(this.terrain, site), temple };
   }
 
   /** Wake, spawn and send home the residents of an active town. */
@@ -371,7 +463,10 @@ export class NpcDirector {
     const evening = night > 0.55, morning = night < 0.3;
     for (const r of town.residents) {
       if (r.creature && r.creature.npc?.remove) r.creature = null;
-      const nightOwl = r.role === 'guard' || (r.role === 'villager' && Math.floor(r.seed) % 7 === 0);
+      // Those not (yet) mad live as ordinary villagers.
+      const role: Role = r.role === 'mad' && (r.madRank ?? 0) >= this.madCount ? 'villager' : r.role;
+      const nightOwl = role === 'guard' || role === 'mad' || (role === 'villager' && Math.floor(r.seed) % 7 === 0);
+      if (role === 'mad') r.asleep = false; // the mad do not sleep
       if (!r.creature) {
         if (r.asleep && morning) { r.wake -= dt; if (r.wake > 0) continue; r.asleep = false; }
         if (r.asleep || (evening && !nightOwl)) { r.asleep = true; r.wake = rand(0, 25); continue; }
@@ -386,10 +481,10 @@ export class NpcDirector {
           const [sx, sz] = pointAlong(st.pts, rand(town.L.plazaR, Math.min(st.len, town.L.radius - 6)));
           x = sx + rand(-1, 1); z = sz + rand(-1, 1);
         }
-        const c = this.host.spawnNpc(r.role, x, z, r.seed);
+        const c = this.host.spawnNpc(role, x, z, r.seed);
         if (!c) continue;
         c.npc = {
-          role: r.role, town, res: r, route: [], ri: 0, task: 'idle', next: 'idle', t: rand(0.5, 3),
+          role, town, res: r, route: [], ri: 0, task: 'idle', next: 'idle', t: rand(0.5, 3),
           partner: null, lines: [], li: 0, stall: r.stall, stuck: 0, remove: false, road: null, s: 0, dir: 1, owl: nightOwl,
         };
         r.creature = c;
@@ -584,6 +679,7 @@ export class NpcDirector {
       case 'perform': return this.perform(c, dt, night);
       case 'listen': return this.listen(c, dt, night);
       case 'announce': return this.announce(c, dt, night);
+      case 'stare': case 'preach': case 'chant': return this.rave(c, dt, night);
       case 'fight': {
         const foe = n.partner;
         if (!foe || foe.gone || foe.dying > 0) { n.partner = null; this.plan(c, night); return true; }
@@ -632,10 +728,14 @@ export class NpcDirector {
       case 'play': n.t = rand(20, 40); break;
       case 'perform': n.t = rand(45, 75); n.lines = pick(SONGS).slice(); n.li = -1; n.s = 0; break;
       case 'listen': n.t = rand(20, 40); break;
+      case 'stare': n.t = rand(10, 20); n.s = 0; n.li = -1; break;
+      case 'preach': n.t = rand(14, 22); n.s = 0; n.li = -1; break;
+      case 'chant': n.t = rand(30, 50); n.s = 0; n.li = -1; break;
       case 'announce': {
         n.lines = pick(CRIES).slice();
         const news = this.news?.();
         if (news) n.lines[1] = news;
+        if (this.madFresh && n.town?.L.city && Math.random() < 0.6) n.lines = ['Ahali, kulak verin!', MAD_CRY];
         n.li = -1; n.s = 0; n.t = 4 + n.lines.length * 3;
         break;
       }
@@ -676,6 +776,22 @@ export class NpcDirector {
         this.go(c, x, z, 'announce');
         return;
       }
+      case 'mad': {
+        // Night: out to the city's edge on the side of the black water, side by side with the others.
+        if (night > 0.55) {
+          const [x, z] = this.vigil(town, n.res?.madRank ?? 0);
+          this.go(c, x, z, 'chant');
+          return;
+        }
+        if (r < 0.4) {
+          const st = pick(L.streets);
+          const [x, z] = pointAlong(st.pts, rand(L.plazaR + 2, Math.min(st.len, L.radius - 6)));
+          this.go(c, x, z, 'stare');
+          return;
+        }
+        if (r < 0.7) { const [x, z] = sq(); this.go(c, x, z, 'preach'); return; }
+        break;
+      }
       case 'farmer':
         if (L.fields.length && r < 0.75) {
           const f = pick(L.fields);
@@ -686,13 +802,13 @@ export class NpcDirector {
     }
     // Gather round the bard while a song is on.
     const bard = this.host.allNpcs().find((o) => o.npc?.task === 'perform' && o.npc.town === town);
-    if (bard && r < 0.22 && n.role !== 'merchant') {
+    if (bard && r < 0.22 && n.role !== 'merchant' && n.role !== 'mad') {
       const s = L.stage!;
       const a = Math.atan2(s.fz, s.fx) + rand(-0.9, 0.9), d = rand(2.2, 3.6);
       this.go(c, s.x + Math.cos(a) * d, s.z + Math.sin(a) * d, 'listen');
       return;
     }
-    if (r < 0.4) { const [x, z] = sq(); this.go(c, x, z, 'chat'); return; }
+    if (r < 0.4 && n.role !== 'mad') { const [x, z] = sq(); this.go(c, x, z, 'chat'); return; }
     const shops = town.residents.filter((o) => o.role === 'merchant' && o.stall).map((o) => o.stall!);
     if (r < 0.62 && shops.length) {
       const s = pick(shops);
@@ -738,7 +854,7 @@ export class NpcDirector {
         n.partner = o; o.npc.partner = c;
         const town = n.town!;
         const g = town.gossip.length && Math.random() < 0.45 ? pick(town.gossip) : null;
-        n.lines = g ? [g.text, pick(GOSSIP_REPLIES)] : pick(CHAT).slice();
+        n.lines = g ? [g.text, pick(GOSSIP_REPLIES)] : town.L.city && Math.random() < 0.25 ? pick(CHAT_MAD).slice() : pick(CHAT).slice();
         n.rumor = g?.id ?? null;
         n.li = -1; n.s = 0;
         n.t = 3 + n.lines.length * 2.6;
@@ -841,6 +957,75 @@ export class NpcDirector {
     if (!bard) { this.plan(c, night); return true; }
     this.face(c, bard, dt);
     c.head = Math.sin(Date.now() * 0.004 + c.seed) * 0.1; // nodding along
+    if (n.t <= 0) this.plan(c, night);
+    return true;
+  }
+
+  /** The black water's side of the city: a street end, the mad side by side across it. */
+  private vigil(town: Town, rank: number): [number, number] {
+    const L = town.L, T = town.temple;
+    const ax = T ? T.x - L.site.x : -1, az = T ? T.z - L.site.z : 0, al = Math.hypot(ax, az) || 1;
+    let best = L.streets[0], bd = -Infinity;
+    for (const st of L.streets) {
+      const [ex, ez] = pointAlong(st.pts, Math.min(st.len, L.radius - 6));
+      const d = ((ex - L.site.x) * ax + (ez - L.site.z) * az) / al;
+      if (d > bd) { bd = d; best = st; }
+    }
+    const [x, z] = pointAlong(best.pts, Math.min(best.len, L.radius - 6));
+    const side = (rank % 2 ? 1 : -1) * Math.ceil(rank / 2) * 1.5;
+    return [x - (az / al) * side, z + (ax / al) * side];
+  }
+
+  /** The mad: stare towards the black water and mutter, preach on the square, chant at night. */
+  private rave(c: Creature, dt: number, night: number): boolean {
+    const n = c.npc!, T = n.town!.temple;
+    this.host.idle(c, dt);
+    n.t -= dt;
+    n.s += dt;
+    const sea = T ?? { x: c.x - 100, z: c.z };
+    const close = Math.hypot(c.x - this.player.x, c.z - this.player.z) < 14;
+    if (n.task === 'stare') {
+      this.face(c, sea, dt);
+      // A twitch now and then.
+      c.head = 0.05 + Math.sin(n.s * 2.1 + c.seed) * 0.04 + (Math.sin(n.s * 23) > 0.93 ? 0.25 : 0);
+      if (n.s > 2 && Math.floor(n.s / 6) !== n.li) {
+        n.li = Math.floor(n.s / 6);
+        // Sometimes the muttering says where it lies (a rumour for the map).
+        if (T && Math.random() < 0.35) {
+          if (this.near(c)) this.bubbles.say(c, `${direction(T.x - c.x, T.z - c.z, true)}... kara suların altında bir tapınak... göz orada açılıyor!`, 3.4);
+          if (close) this.onRumor?.(T.id);
+        } else if (this.near(c)) this.bubbles.say(c, pick(MAD_MUTTER), 3);
+      }
+    } else if (n.task === 'preach') {
+      // Arms up, shouting at the square; whoever is near shakes their head.
+      c.tail = 0.9 + Math.sin(n.s * 3) * 0.3;
+      c.head = -0.15 + Math.sin(n.s * 5) * 0.05;
+      c.yaw += Math.sin(n.s * 0.7 + c.seed) * dt * 0.8;
+      if (Math.floor(n.s / 3.4) !== n.li) {
+        n.li = Math.floor(n.s / 3.4);
+        if (this.near(c)) this.bubbles.say(c, pick(MAD_PREACH), 2.8);
+        if (n.li % 2 === 1) {
+          const by = this.host.allNpcs().find((o) => o !== c && o.npc && o.npc.role !== 'mad' && o.npc.role !== 'kid' && Math.hypot(o.x - c.x, o.z - c.z) < 7);
+          if (by && this.near(by)) this.bubbles.say(by, pick(MAD_REACT), 2.6);
+        }
+      }
+    } else {
+      // The chant, in unison with the others (one clock), arms raised towards the water.
+      this.face(c, sea, dt);
+      c.tail = 1.1 + Math.sin(this.time * 1.8) * 0.25;
+      c.head = -0.25;
+      c.glow = 0.12 + Math.sin(this.time * 1.8) * 0.06;
+      const turn = Math.floor(this.time / 3.5);
+      if (turn !== n.li) {
+        n.li = turn;
+        if (this.near(c)) this.bubbles.say(c, MAD_CHANT[turn % MAD_CHANT.length], 3);
+        // A guard on the rounds tells them off.
+        if (turn % 5 === 0 && (n.res?.madRank ?? 0) === 0) {
+          const g = this.host.allNpcs().find((o) => o.npc?.role === 'guard' && Math.hypot(o.x - c.x, o.z - c.z) < 25);
+          if (g && this.near(g)) this.bubbles.say(g, pick(GUARD_MAD), 2.6);
+        }
+      }
+    }
     if (n.t <= 0) this.plan(c, night);
     return true;
   }

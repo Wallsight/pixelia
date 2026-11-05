@@ -267,6 +267,27 @@ export function crier(): Box[] {
   ];
 }
 
+/** A city dweller gone mad from what lies under the black water: wild hair, rags, staring pale eyes, a scrawled note. */
+export function mad(): Box[] {
+  const H = (at: V3, sz: V3): Box => ({ s: sz, at, c: '#ffffff', t: SL.HAIR, part: PART.HEAD, pivot: headPivot });
+  return [
+    ...body(),
+    // Hair standing on end.
+    H([0.13, 1.94, 0.04], [0.08, 0.2, 0.08]), H([-0.1, 1.96, -0.06], [0.08, 0.24, 0.08]), H([0.0, 1.93, 0.13], [0.07, 0.16, 0.07]),
+    H([0.23, 1.82, -0.1], [0.12, 0.08, 0.08]), H([-0.24, 1.84, 0.04], [0.12, 0.08, 0.08]),
+    // Pale, too-wide eyes with dark rings under them.
+    { s: [0.06, 0.05, 0.02], at: [0.09, 1.6, 0.2], c: '#c8b8f0', t: SL.FIXED, part: PART.HEAD, pivot: headPivot },
+    { s: [0.06, 0.05, 0.02], at: [-0.09, 1.6, 0.2], c: '#c8b8f0', t: SL.FIXED, part: PART.HEAD, pivot: headPivot },
+    { s: [0.09, 0.03, 0.02], at: [0.09, 1.555, 0.198], c: '#4a3a4a', t: SL.FIXED, part: PART.HEAD, pivot: headPivot },
+    { s: [0.09, 0.03, 0.02], at: [-0.09, 1.555, 0.198], c: '#4a3a4a', t: SL.FIXED, part: PART.HEAD, pivot: headPivot },
+    // Torn shirt hem and a patch.
+    { s: [0.16, 0.1, 0.285], at: [0.14, 0.78, 0], c: '#3a3430', t: SL.FIXED },
+    { s: [0.12, 0.12, 0.02], at: [-0.1, 1.15, 0.14], c: '#5a4a3a', t: SL.FIXED },
+    // A scrawled note clutched in the left hand.
+    { s: [0.03, 0.22, 0.17], at: [-0.38, 0.72, 0.08], c: '#e8e0c8', t: SL.FIXED, part: PART.ARM_L, pivot: [-0.33, 1.32, 0] },
+  ];
+}
+
 export function traveler(): Box[] {
   return [
     ...body({ hair: false, long: true }),

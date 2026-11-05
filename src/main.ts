@@ -421,6 +421,12 @@ function step(): void {
         };
         (window as unknown as Record<string, unknown>).__role = (role: string) => creatures.allNpcs().filter((c) => c.npc?.role === role)
           .map((c) => ({ task: c.npc!.task, next: c.npc!.next, ri: c.npc!.ri, route: c.npc!.route.length / 2, at: [Math.round(c.x), Math.round(c.z)] }));
+        // Dev: 'add' turns one more of the city's folk mad, 'stare'/'preach'/'chant' puts them to it at x, z; else where they are.
+        (window as unknown as Record<string, unknown>).__mad = (what = 'info', x = 0, z = 0) => {
+          if (what === 'add') creatures.npcs.addMad();
+          else if (what === 'stare' || what === 'preach' || what === 'chant') creatures.npcs.devMad(what, x, z);
+          return creatures.npcs.madInfo();
+        };
         (window as unknown as Record<string, unknown>).__sound = () => { sound.start(); return sound.stats(); };
         (window as unknown as Record<string, unknown>).__meter = () => sound.engine.meter();
         (window as unknown as Record<string, unknown>).__sfx = (n: string) => sound.demo(n);
