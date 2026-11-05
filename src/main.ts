@@ -178,6 +178,8 @@ function findSpawn(): [number, number] {
 }
 // Dev-only camera hooks for automated screenshots: ?shot&tp=x,z&yaw=deg&pitch=deg
 const DEV_SHOT = import.meta.env.DEV && params.has('shot');
+/** ?dev (dev builds): the same window.__ hooks, but the game starts normally from the menu (UI checks). */
+const DEV_HOOKS = DEV_SHOT || (import.meta.env.DEV && params.has('dev'));
 const devTp = import.meta.env.DEV ? /^(-?\d{1,7}),(-?\d{1,7})$/.exec(params.get('tp') ?? '') : null;
 const [spawnX, spawnZ] = devTp ? [Number(devTp[1]) + 0.5, Number(devTp[2]) + 0.5] : findSpawn();
 camera.position.set(spawnX, terrain.sample(spawnX, spawnZ).h + 3, spawnZ);
@@ -189,11 +191,13 @@ const status = document.getElementById('status')!;
 const startBtn = document.getElementById('start') as HTMLButtonElement;
 const debug = document.getElementById('debug')!;
 let showDebug = !TOUCH;
+document.body.classList.add('menu'); // HUD stays hidden behind the menu until play starts
 debug.classList.toggle('hidden', !showDebug);
 
 /** Shows or hides the pause overlay once the player starts, pauses or resumes. */
 function setActive(active: boolean): void {
   overlay.classList.toggle('hidden', active);
+  document.body.classList.toggle('menu', !active);
   touch?.show(active && touchMode);
   if (active) sound.start(); else sound.engine.suspend();
   if (!active && worldMap.open) toggleMap();
@@ -337,6 +341,9 @@ function step(): void {
         player.flying = params.has('fly');
         if (params.has('walk')) player.locked = true; // lets the tool inject keys without pointer lock
         overlay.classList.add('hidden');
+        document.body.classList.remove('menu');
+      }
+      if (DEV_HOOKS) {
         // Expose a frame benchmark for the dev screenshot tool (dev builds only).
         (window as unknown as Record<string, unknown>).__bench = (n: number) => {
           const gl = renderer.getContext();
@@ -424,6 +431,14 @@ function step(): void {
           player.pitch = -Math.atan2(up, dist) * 0.8;
           return c.toArray().map(Math.round);
         };
+        // Dev: put every kind of HUD message on screen at once (layout checks).
+        (window as unknown as Record<string, unknown>).__ui = () => {
+          discovery.announce('NADİR YARATIK', 'Kemik Kral göründü!', 'kuzeyde, 300 adım ötede · haritada ☠');
+          partyChat.post('Gece Farmcıları', 'Aras', 'tank bende, healer arkada kalsın');
+          partyChat.post('Gece Farmcıları', 'Mira', 'ok yağmuru geliyor, kenara çekilin!');
+          subtitle.show('Közhan', 'Hmm... Bir ayak sesi. Yüz yıldır kimse bu kadar yaklaşmaya cesaret edemedi.', 8, false);
+          return 'ok';
+        };
         document.title = 'READY';
       }
     } else {
@@ -438,7 +453,8 @@ function step(): void {
     const p = player.position, ly = creatures.wyrm.liftOut(p.x - 0.3, p.x + 0.3, p.y, p.z - 0.3, p.z + 0.3, 1.8);
     if (ly !== p.y) { p.y = ly; player.velocity.y = Math.max(0, player.velocity.y); }
   }
-  if (spawned) discovery.update(dt, player.position.x, player.position.z);
+  // Not behind the menu: its toasts would play out unseen.
+  if (spawned && (player.locked || DEV_SHOT)) discovery.update(dt, player.position.x, player.position.z);
   legendBoard?.update(dt);
   subtitle.update(dt);
   partyChat.update(dt);

@@ -126,7 +126,9 @@ body.touch #map { inset: max(54px, calc(env(safe-area-inset-top) + 48px)) max(8p
 #touch.flying .t-down { display: block; }
 #touch .t-btn.on { background: rgba(79, 138, 46, 0.85); }
 body.map-open .t-jump, body.map-open .t-down { display: none; }
-body.touch #toast { top: max(56px, calc(env(safe-area-inset-top) + 50px)); max-width: calc(100vw - 24px); padding: 8px 16px 10px; }
+/* Touch HUD stack, top down: buttons, compass (with the countdown), toast, party chat. */
+body.touch { --hud-compass-top: max(44px, calc(env(safe-area-inset-top) + 40px)); --hud-below-compass: calc(var(--hud-compass-top) + min(92px, (100vw - 24px) * 0.219) + 4px); }
+body.touch #toast { top: var(--hud-below-compass); max-width: calc(100vw - 24px); box-sizing: border-box; padding: 8px 16px 10px; }
 body.touch #toast .title { font-size: 18px; }
 
 /* Subtitles (the great dragon's voice) */
@@ -156,12 +158,25 @@ body.touch #subtitle .line { font-size: 14px; }
 #partychat .pc-party { color: #7ab8ff; }
 #partychat .pc-who { color: #9ae07a; }
 #partychat .pc-text { color: #e8f0ff; }
-body.touch #partychat { bottom: auto; top: max(110px, calc(env(safe-area-inset-top) + 104px)); font-size: 11px; width: min(300px, calc(100vw - 24px)); }
+/* Portrait: under the toast's place. Landscape: beside it on the left (the toast gets narrower). */
+body.touch #partychat { bottom: auto; top: calc(var(--hud-below-compass) + 112px); font-size: 11px; width: min(300px, calc(100vw - 24px)); }
+@media (orientation: landscape) {
+  body.touch #partychat { top: var(--hud-below-compass); width: min(260px, 30vw); }
+  body.touch #toast { max-width: 36vw; }
+}
+/* The map has the screen: no chat over it, and the dragon speaks at its top edge. */
+body.map-open #partychat { display: none; }
+body.map-open #subtitle { bottom: auto; top: 70px; }
+body.touch.map-open #subtitle { top: calc(max(54px, calc(env(safe-area-inset-top) + 48px)) + 44px); }
 
 /* Compass strip (rare creatures) */
 #compass { position: fixed; top: 6px; left: 50%; transform: translateX(-50%); width: 420px; height: 92px; pointer-events: none; image-rendering: auto; }
 body.map-open #compass { display: none; }
-body.touch #compass { top: max(44px, calc(env(safe-area-inset-top) + 40px)); width: min(420px, calc(100vw - 24px)); height: auto; }
+body.touch #compass { top: var(--hud-compass-top); width: min(420px, calc(100vw - 24px)); height: auto; }
+/* The menu and pause screens hide the HUD behind them. */
+body.menu #compass, body.menu #partychat, body.menu #subtitle, body.menu #toast, body.menu #map-hint { visibility: hidden; }
+/* Only phones held upright need the hint to turn them. */
+@media (orientation: landscape), (min-width: 700px) { body.touch p.rotate-hint { display: none; } }
 
 /* Always-visible map key */
 #map-hint {
