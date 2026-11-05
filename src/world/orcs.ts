@@ -254,7 +254,7 @@ function buildLayout(t: Terrain, site: Site): OrcLayout {
 
 // ------------------------------------------------------------------ voxels
 
-class Grid {
+export class Grid {
   readonly cells: Uint8Array;
   readonly w: number;
   readonly h = DOWN + UP;
@@ -282,7 +282,7 @@ class Grid {
   }
 }
 
-function surfaceFor(biome: number): number {
+export function surfaceFor(biome: number): number {
   return biome === BIOME.BADLANDS ? B.CLAY_TAN : B.SAND;
 }
 
@@ -559,7 +559,7 @@ export function buildOrcPlan(t: Terrain, site: Site): OrcPlan {
   };
 }
 
-function buildHut(g: Grid, h: Hut, Y: number, n: (x: number, y: number, z: number, k?: number) => number): void {
+export function buildHut(g: Grid, h: Hut, Y: number, n: (x: number, y: number, z: number, k?: number) => number): void {
   const R = Math.ceil(h.r) + 1;
   const doorA = Math.atan2(Math.cos(h.yaw), Math.sin(h.yaw)); // yaw -> world angle (x = cos, z = sin)
   const levels = Math.ceil(h.r / 0.9);

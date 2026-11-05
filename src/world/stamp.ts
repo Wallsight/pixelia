@@ -8,6 +8,7 @@ import { buildCastle, C_AIR, C_FILL, C_KEEP, C_SURFACE, type CastlePlan } from '
 import { buildVillagePlan, type VillagePlan } from './village';
 import { SITE_CASTLE, SITE_CITY, SITE_CROSSROAD, SITE_ORC, SITE_VILLAGE, pointAlong, polylineLength, type Landmark, type Road, type Site } from './structures';
 import { buildOrcPlan, type OrcPlan } from './orcs';
+import { frontPlans } from './front';
 import { buildLandmark, LANDMARK_REACH, type LandmarkPlan } from './landmarks';
 import type { Terrain } from './terrain';
 
@@ -143,6 +144,8 @@ export function placeStructures(t: Terrain, blocks: Uint8Array, x0: number, z0: 
   for (const c of castles) stampCastle(c, blocks, x0, z0, mask);
   for (const s of sites) if (isSettlement(s)) stampCastle(villageFor(t, s), blocks, x0, z0, mask);
   for (const s of sites) if (s.kind === SITE_ORC) stampCastle(orcFor(t, s), blocks, x0, z0, mask);
+  // The war front's two field camps and the scarred ground between them (skipped at once when far).
+  for (const p of frontPlans(t)) stampCastle(p, blocks, x0, z0, mask);
   for (const lm of t.landmarks.near(x0, z0, x1, z1, LANDMARK_REACH)) stampCastle(landmarkFor(t, lm), blocks, x0, z0, mask);
 
   // --- crossroads: a stone lantern post beside the junction
