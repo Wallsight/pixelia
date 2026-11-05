@@ -10,32 +10,47 @@ import type { Terrain } from '../world/terrain';
 import { createPropMaterial, type EnvUniforms } from './materials';
 
 interface Door {
-  root: THREE.Group;
-  /** Turns about the hinge: 0 shut, -90 degrees open (into the house). */
-  swing: THREE.Group;
+  /** Hinge post position and the leaf's yaw when shut (local +x along the wall, +z into the house). */
+  hx: number; hy: number; hz: number; yaw: number;
   /** Cell centre, to measure the player's distance. */
   x: number; z: number;
+  /** 0 shut .. 1 open. */
   angle: number;
 }
 
 const NEAR = 70;
 const OPEN_AT = 2.4;
+const MAX = 320;
+/** Parts of a leaf, in leaf space (x from the hinge along the leaf). */
+const PARTS: Array<{ mesh: 0 | 1 | 2; at: [number, number, number] }> = [
+  { mesh: 0, at: [0.44, 0.97, 0] }, { mesh: 1, at: [0.44, 0.4, 0] }, { mesh: 1, at: [0.44, 1.55, 0] }, { mesh: 2, at: [0.76, 0.95, 0] },
+];
 
+/** Every door is drawn by three instanced meshes (planks, iron bands, brass knob): a few draw calls for a whole town. */
 export class DoorDirector {
   readonly group = new THREE.Group();
   private doors = new Map<string, Door>();
   private scan = 0;
-  private leafGeo = new THREE.BoxGeometry(0.86, 1.94, 0.1);
-  private bandGeo = new THREE.BoxGeometry(0.88, 0.08, 0.12);
-  private knobGeo = new THREE.BoxGeometry(0.08, 0.08, 0.16);
-  private wood: THREE.Material;
-  private iron: THREE.Material;
-  private brass: THREE.Material;
+  private meshes: THREE.InstancedMesh[];
+  private dirty = true;
+  private m = new THREE.Matrix4();
+  private q = new THREE.Quaternion();
+  private v = new THREE.Vector3();
+  private one = new THREE.Vector3(1, 1, 1);
+  private up = new THREE.Vector3(0, 1, 0);
 
   constructor(private terrain: Terrain, env: EnvUniforms, shadows: boolean) {
-    this.wood = createPropMaterial(env, { color: '#7a5432', shadows });
-    this.iron = createPropMaterial(env, { color: '#3a2a1c', shadows });
-    this.brass = createPropMaterial(env, { color: '#d8b04a', shadows });
+    const mats = [
+      createPropMaterial(env, { color: '#7a5432', shadows }), createPropMaterial(env, { color: '#3a2a1c', shadows }), createPropMaterial(env, { color: '#d8b04a', shadows }),
+    ];
+    const geos = [new THREE.BoxGeometry(0.86, 1.94, 0.1), new THREE.BoxGeometry(0.88, 0.08, 0.12), new THREE.BoxGeometry(0.08, 0.08, 0.16)];
+    this.meshes = geos.map((g, i) => {
+      const mesh = new THREE.InstancedMesh(g, mats[i], i === 1 ? MAX * 2 : MAX);
+      mesh.count = 0;
+      mesh.frustumCulled = false; // instances spread over a whole town
+      this.group.add(mesh);
+      return mesh;
+    });
   }
 
   /** others: villagers about (they open doors too). */
@@ -43,12 +58,16 @@ export class DoorDirector {
     this.scan -= dt;
     if (this.scan <= 0) { this.scan = 1; this.refresh(px, pz); }
     for (const d of this.doors.values()) {
-      const near = (o: { x: number; z: number }) => Math.abs(d.x - o.x) < 1.6 && Math.abs(d.z - o.z) < 1.6;
-      const want = Math.hypot(d.x - px, d.z - pz) < OPEN_AT || others.some(near) ? 1 : 0;
+      // Cheap first: only doors near the player or with someone right at them move.
+      let want = Math.abs(d.x - px) < OPEN_AT && Math.abs(d.z - pz) < OPEN_AT && Math.hypot(d.x - px, d.z - pz) < OPEN_AT ? 1 : 0;
+      if (!want && Math.abs(d.x - px) < NEAR && Math.abs(d.z - pz) < NEAR) {
+        for (const o of others) if (Math.abs(d.x - o.x) < 1.6 && Math.abs(d.z - o.z) < 1.6) { want = 1; break; }
+      }
       if (d.angle === want) continue;
       d.angle = want > d.angle ? Math.min(want, d.angle + dt * 3) : Math.max(want, d.angle - dt * 2);
-      d.swing.rotation.y = -d.angle * (Math.PI / 2) * 0.95;
+      this.dirty = true;
     }
+    if (this.dirty) this.write();
   }
 
   /** Doors of every house within reach; the rest are dropped. */
@@ -65,28 +84,32 @@ export class DoorDirector {
           const x = h.cx + lx * rx + h.hd * h.fx, z = h.cz + lx * rz + h.hd * h.fz;
           const key = `${x},${z}`;
           keep.add(key);
-          if (!this.doors.has(key)) this.doors.set(key, this.make(x, h.y + 1, z, rx, rz));
+          if (!this.doors.has(key) && this.doors.size < MAX) {
+            this.doors.set(key, { hx: x + 0.5 - rx * 0.45, hy: h.y + 1, hz: z + 0.5 - rz * 0.45, yaw: Math.atan2(-rz, rx), x: x + 0.5, z: z + 0.5, angle: 0 });
+            this.dirty = true;
+          }
         }
       }
     }
-    for (const [key, d] of this.doors) if (!keep.has(key)) { this.group.remove(d.root); this.doors.delete(key); }
+    for (const key of this.doors.keys()) if (!keep.has(key)) { this.doors.delete(key); this.dirty = true; }
   }
 
-  /** A leaf hinged at one edge of the doorway, swinging into the house. */
-  private make(x: number, y: number, z: number, rx: number, rz: number): Door {
-    // Root: at the hinge, local +x along the wall (the house's right), local +z into the house.
-    const root = new THREE.Group();
-    root.position.set(x + 0.5 - rx * 0.45, y, z + 0.5 - rz * 0.45);
-    root.rotation.y = Math.atan2(-rz, rx);
-    const swing = new THREE.Group();
-    const board = new THREE.Mesh(this.leafGeo, this.wood);
-    board.position.set(0.44, 0.97, 0);
-    const b1 = new THREE.Mesh(this.bandGeo, this.iron); b1.position.set(0.44, 0.4, 0);
-    const b2 = new THREE.Mesh(this.bandGeo, this.iron); b2.position.set(0.44, 1.55, 0);
-    const knob = new THREE.Mesh(this.knobGeo, this.brass); knob.position.set(0.76, 0.95, 0);
-    swing.add(board, b1, b2, knob);
-    root.add(swing);
-    this.group.add(root);
-    return { root, swing, x: x + 0.5, z: z + 0.5, angle: 0 };
+  /** Instance matrices: hinge, then the leaf turned by its swing, then each part along the leaf. */
+  private write(): void {
+    this.dirty = false;
+    const counts = [0, 0, 0];
+    for (const d of this.doors.values()) {
+      const yaw = d.yaw - d.angle * (Math.PI / 2) * 0.95;
+      const c = Math.cos(yaw), s = Math.sin(yaw);
+      this.q.setFromAxisAngle(this.up, yaw);
+      for (const p of PARTS) {
+        // Rotate the part's offset about Y by yaw (three.js: x' = x cos + z sin, z' = -x sin + z cos).
+        const [ox, oy, oz] = p.at;
+        this.v.set(d.hx + ox * c + oz * s, d.hy + oy, d.hz - ox * s + oz * c);
+        this.m.compose(this.v, this.q, this.one);
+        this.meshes[p.mesh].setMatrixAt(counts[p.mesh]++, this.m);
+      }
+    }
+    this.meshes.forEach((mesh, i) => { mesh.count = counts[i]; mesh.instanceMatrix.needsUpdate = true; });
   }
 }

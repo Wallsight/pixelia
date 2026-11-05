@@ -71,7 +71,12 @@ const START_HOUR = intParam('hour', 8, 0, 23);
 // ------------------------------------------------------------ renderer
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, TOUCH ? 1 : 1.5));
+// Render resolution: a cap per device kind, then lowered (and raised again) by the frame rate
+// unless ?dpr= fixes it. Phones also get a smaller, less often redrawn shadow map.
+const DPR_FIXED = params.has('dpr') ? Number(params.get('dpr')) : NaN;
+const DPR_BASE = Number.isFinite(DPR_FIXED) && DPR_FIXED > 0 ? Math.min(3, DPR_FIXED) : Math.min(window.devicePixelRatio, TOUCH ? 1 : 1.5);
+let dpr = DPR_BASE;
+renderer.setPixelRatio(dpr);
 renderer.setSize(window.innerWidth, window.innerHeight, false);
 renderer.toneMapping = THREE.NeutralToneMapping; // keeps pastel hues intact
 renderer.toneMappingExposure = 1.0;
@@ -91,12 +96,13 @@ const sky = new Sky(env, daynight);
 scene.add(sky.mesh);
 const clouds = new Clouds(env);
 scene.add(clouds.mesh);
-const shadows = SHADOWS ? new ShadowSystem(env) : null;
+const shadows = SHADOWS ? (TOUCH ? new ShadowSystem(env, 1024, 72, 2) : new ShadowSystem(env)) : null;
 const atmosphere = new Atmosphere(env, daynight);
 scene.add(atmosphere.group);
 let focusSample: ColumnSample | null = null;
 
 const world = new World(SEED, env, RENDER_DISTANCE, SHADOWS);
+world.plantDistance = TOUCH ? 6 : 8;
 world.onError = (msg) => showError(`chunk: ${msg}`);
 scene.add(world.group);
 
@@ -398,11 +404,73 @@ let frames = 0, fpsTime = 0, fps = 0, biomeName = '', biomeTimer = 0;
 function frame(): void {
   // Ask for the next frame first: one bad frame must not stop the game (or freeze the loading screen).
   requestAnimationFrame(frame);
-  try { step(); } catch (e) { showError(e); }
+  try { step(); adaptResolution(); } catch (e) { showError(e); }
 }
+
+/**
+ * Lower the render resolution in steps while frames take too long (below ~42 fps), raise it again
+ * when there is room (above ~56 fps). A step that does not make frames faster (a phone held at
+ * 30 fps by its power saver, a slow CPU) is taken back and becomes the floor.
+ */
+const DPR_MIN = TOUCH ? 0.6 : 0.75;
+let dprFloor = DPR_MIN, emaDt = 1 / 60, slowT = 0, fastT = 0, lastFrameT = performance.now();
+let trial: { kind: 'dpr' | 'rd'; from: number; before: number; t: number } | null = null;
+/** Second step, once the resolution is at its floor: a shorter view (fog follows). */
+const RD_MIN = TOUCH ? 5 : 7;
+let rd = RENDER_DISTANCE, rdFloor = RD_MIN;
+function setRd(v: number): void {
+  rd = v;
+  world.setRenderDistance(v);
+  env.uFogFar.value = v * 16 - 8;
+  env.uFogNear.value = env.uFogFar.value * 0.55;
+}
+function setDpr(v: number): void {
+  dpr = Math.round(v * 100) / 100;
+  renderer.setPixelRatio(dpr);
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+}
+function adaptResolution(): void {
+  const now = performance.now(), dt = Math.min(0.25, (now - lastFrameT) / 1000);
+  lastFrameT = now;
+  if (Number.isFinite(DPR_FIXED) || DEV_SHOT || !spawned || !player.locked || document.hidden || worldMap.open) { slowT = fastT = 0; return; }
+  emaDt += (dt - emaDt) * 0.05;
+  if (trial) {
+    trial.t += dt;
+    if (trial.t > 3) {
+      // Did the smaller picture help? If not, go back and stay at least there.
+      if (emaDt > trial.before * 0.92) {
+        if (trial.kind === 'dpr') { dprFloor = trial.from; setDpr(trial.from); } else { rdFloor = trial.from; setRd(trial.from); }
+      }
+      trial = null;
+    }
+    return;
+  }
+  if (emaDt > 1 / 42) { slowT += dt; fastT = 0; } else if (emaDt < 1 / 56) { fastT += dt; slowT = 0; } else { slowT = 0; fastT = 0; }
+  if (slowT > 2 && dpr > dprFloor + 0.01) {
+    trial = { kind: 'dpr', from: dpr, before: emaDt, t: 0 };
+    setDpr(Math.max(dprFloor, dpr - 0.1));
+    slowT = 0;
+  } else if (slowT > 4 && rd > rdFloor) {
+    trial = { kind: 'rd', from: rd, before: emaDt, t: -3 }; // chunks take a moment to unload
+    setRd(rd - 1);
+    slowT = 0;
+  } else if (fastT > 10 && rd < RENDER_DISTANCE) {
+    setRd(rd + 1);
+    fastT = 0;
+  } else if (fastT > 6 && rd >= RENDER_DISTANCE && dpr < DPR_BASE - 0.01) {
+    setDpr(Math.min(DPR_BASE, dpr + 0.1));
+    fastT = 0;
+  }
+}
+
+// Frame time per part of the loop (dev: __prof() gives ms per frame since the last call).
+const prof = new Map<string, number>();
+let profT = 0, profFrames = 0;
+const mark = (k: string): void => { const t = performance.now(); prof.set(k, (prof.get(k) ?? 0) + t - profT); profT = t; };
 
 function step(): void {
   const now = performance.now();
+  profT = now; profFrames++;
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
   env.uTime.value += dt;
@@ -411,8 +479,10 @@ function step(): void {
   atmosphere.update(dt, focusSample);
   beacon?.update(dt, daynight.night, camera.position);
 
+  mark('env');
   const focus = spawned ? player.position : camera.position;
   world.update(focus.x, focus.z);
+  mark('world');
 
   if (!spawned) {
     const sy = world.surfaceY(Math.floor(spawnX), Math.floor(spawnZ));
@@ -529,6 +599,19 @@ function step(): void {
           shopAt = [player.position.x, player.position.z]; shop.show(kind); if (i >= 0) shop.buy(i);
           return `gold ${gold.stats.gold} boots ${shop.boots} fed ${Math.round(shop.fed)} chest ${shop.chest ? `${Math.round(shop.chest.x)},${Math.round(shop.chest.z)}` : '-'} speed ${player.speedBoost} hour ${daynight.clock()} | ${document.querySelector('#shop .say')?.textContent}`;
         };
+        (window as unknown as Record<string, unknown>).__prof = () => {
+          const n = Math.max(1, profFrames), out = [...prof].map(([k, v]) => `${k} ${(v / n).toFixed(2)}`).join(' | ');
+          const r = renderer.info.render;
+          prof.clear(); profFrames = 0;
+          return `${n}f | ${out} | calls ${r.calls} tris ${(r.triangles / 1000).toFixed(0)}k creatures ${creatures.total}`;
+        };
+        // Dev: meshes per top-level scene group (what costs draw calls).
+        (window as unknown as Record<string, unknown>).__scene = () => {
+          const named: Array<[string, THREE.Object3D]> = [['world', world.group], ['creatures', creatures.group], ['doors', doors.group], ['gold', gold.group], ['quests', quests.group], ['eldritch', eldritch.group]];
+          const out = named.map(([k, g]) => { let m = 0, v = 0; g.traverse((o) => { if ((o as THREE.Mesh).isMesh || (o as THREE.Sprite).isSprite) { m++; if (o.visible) v++; } }); return `${k} ${v}/${m}`; });
+          let rest = 0; scene.traverse((o) => { if ((o as THREE.Mesh).isMesh) rest++; });
+          return out.join(' | ') + ` | all meshes ${rest}`;
+        };
         (window as unknown as Record<string, unknown>).__pause = () => { pauseUnlocked(); return 'paused'; };
         (window as unknown as Record<string, unknown>).__gold = () => gold.info(player.position.x, player.position.z);
         // Dev: offer a task from the nearest board; 'yes' accepts the open offer.
@@ -562,25 +645,33 @@ function step(): void {
       camera.rotation.y += dt * 0.15;
     }
   }
+  mark('setup');
   player.update(dt);
   if (touchMode) touch?.syncFly();
+  mark('player');
   if (spawned && !worldMap.open) {
     creatures.update(dt, player.position.x, player.position.z, daynight.night, camera.position);
     // The great dragon lifting its head under the player carries them up.
     const p = player.position, ly = creatures.wyrm.liftOut(p.x - 0.3, p.x + 0.3, p.y, p.z - 0.3, p.z + 0.3, 1.8);
     if (ly !== p.y) { p.y = ly; player.velocity.y = Math.max(0, player.velocity.y); }
   }
+  mark('creatures');
   // Not behind the menu: its toasts would play out unseen.
   if (spawned && (player.locked || DEV_SHOT)) discovery.update(dt, player.position.x, player.position.z);
   legendBoard?.update(dt);
   subtitle.update(dt);
   partyChat.update(dt);
+  mark('ui');
   if (spawned) {
     camera.getWorldDirection(camFwd);
     eldritch.update(dt, camera.position, camFwd, daynight.night, focusSample);
+    mark('eldritch');
     doors.update(dt, player.position.x, player.position.z, creatures.allNpcs());
+    mark('doors');
     gold.update(dt, player.position.x, player.position.y, player.position.z);
+    mark('gold');
     quests.update(dt, player.position.x, player.position.y, player.position.z);
+    mark('quests');
     shop.update(dt);
     player.speedBoost = shop.speed;
     if (shop.chest && gold.isTaken(shop.chest.id)) shop.chestTaken();
@@ -595,6 +686,7 @@ function step(): void {
       if (Math.floor(records.time / 30) !== Math.floor((records.time - dt) / 30)) records.save(recordNow());
     }
     interact.update(player.position.x, player.position.y, player.position.z, player.locked && !worldMap.open);
+    mark('interact');
     camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
     sound.update(dt, {
       camera, forward: camFwd, up: camUp, pos: player.position, vel: player.velocity,
@@ -602,14 +694,19 @@ function step(): void {
       night: daynight.night, time: daynight.time, timeSpeed: daynight.speed, sample: focusSample,
     });
   }
+  mark('sound');
   sky.update(camera);
   clouds.update(camera);
-
+  mark('sky');
   shadows?.render(renderer, scene, camera.position, daynight.lightDir, daynight.shadowStrength);
+  mark('shadows');
   renderer.render(scene, camera);
+  mark('render');
   worldMap.draw(player.position.x, player.position.z, player.yaw);
+  mark('map');
   compass.update(player.yaw, player.position.x, player.position.z, [...creatures.rare.markers(), ...creatures.front.markers(), ...quests.markers(), ...(shop.chest ? [{ x: shop.chest.x, z: shop.chest.z, label: 'Hazine', done: false, icon: '✕' }] : [])], creatures.rare.nextIn);
 
+  mark('compass');
   frames++;
   fpsTime += dt;
   biomeTimer -= dt;
@@ -623,7 +720,7 @@ function step(): void {
     const p = player.position;
     const info = renderer.info.render;
     debug.textContent =
-      `${fps} FPS\n` +
+      `${fps} FPS  çözünürlük ${dpr.toFixed(2)}  görüş ${rd}\n` +
       `XYZ  ${p.x.toFixed(1)} / ${p.y.toFixed(1)} / ${p.z.toFixed(1)}\n` +
       `Biyom  ${biomeName}   Saat ${daynight.clock()}${daynight.speed > 1 ? ' (hızlı)' : ''}\n` +
       `Chunk  ${world.loadedCount} (+${world.pendingCount})  çizim ${info.calls}  üçgen ${(info.triangles / 1000).toFixed(0)}k\n` +

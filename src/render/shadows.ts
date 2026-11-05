@@ -27,7 +27,11 @@ export class ShadowSystem {
   private texelWorld: number;
   private initialized = false;
 
-  constructor(private env: EnvUniforms, readonly size = 2048, readonly radius = 90) {
+  private frame = 0;
+  private lastCenter = new THREE.Vector3(Infinity, 0, 0);
+
+  /** every: redraw the map only every n-th frame while the player and the light stay put (phones: 2). */
+  constructor(private env: EnvUniforms, readonly size = 2048, readonly radius = 90, readonly every = 1) {
     const depth = new THREE.DepthTexture(size, size);
     depth.type = THREE.UnsignedIntType;
     depth.compareFunction = THREE.LessEqualCompare;
@@ -57,7 +61,10 @@ export class ShadowSystem {
     }
     this.initialized = true;
     // Only follow the light when it has moved noticeably: avoids shadow crawl.
-    if (this.lightDir.angleTo(lightDir) > 0.003) this.lightDir.copy(lightDir);
+    const turned = this.lightDir.angleTo(lightDir) > 0.003;
+    if (this.every > 1 && ++this.frame % this.every !== 0 && !turned && center.distanceToSquared(this.lastCenter) < 1) return;
+    this.lastCenter.copy(center);
+    if (turned) this.lightDir.copy(lightDir);
 
     // Orient the camera, then snap its centre to whole shadow texels in light space.
     const cam = this.camera;

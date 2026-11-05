@@ -13,6 +13,7 @@ export class Compass {
   private canvas = document.createElement('canvas');
   private g: CanvasRenderingContext2D;
   private dpr = Math.min(2, window.devicePixelRatio || 1);
+  private last = '';
 
   constructor() {
     this.canvas.id = 'compass';
@@ -24,6 +25,11 @@ export class Compass {
 
   /** yaw: the player's (looking along -sin, -cos); +z is south. */
   update(yaw: number, px: number, pz: number, marks: CompassMark[], next: number): void {
+    // Redraw only when something on it would change (it is a 2D canvas: not free on phones).
+    let key = `${Math.round(yaw * 400)}|${Math.round(px * 2)}|${Math.round(pz * 2)}|${Math.floor(next)}`;
+    for (const m of marks) key += `|${m.done ? 1 : 0}${m.icon ?? ''}${Math.round(m.x)},${Math.round(m.z)}`;
+    if (key === this.last) return;
+    this.last = key;
     const g = this.g, d = this.dpr;
     g.setTransform(d, 0, 0, d, 0, 0);
     g.clearRect(0, 0, W, H);

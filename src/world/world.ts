@@ -15,6 +15,8 @@ interface Chunk {
   blocks: Uint8Array;
   group: THREE.Group;
   signs: THREE.Group[];
+  /** Grass and flower sprites: hidden beyond plantDistance (tiny out there, and a draw call each). */
+  plants: THREE.Mesh | null;
 }
 
 const key = (cx: number, cz: number) => `${cx},${cz}`;
@@ -111,6 +113,16 @@ export class World {
     return 0;
   }
 
+  /** Change how far chunks load (the next update loads/unloads to match). */
+  setRenderDistance(r: number): void {
+    if (r === this.renderDistance) return;
+    this.renderDistance = r;
+    this.lastCenter = '';
+  }
+
+  /** Chunks farther than this (in chunks) draw no plant sprites. */
+  plantDistance = 8;
+
   update(px: number, pz: number): void {
     const pcx = Math.floor(px / CHUNK), pcz = Math.floor(pz / CHUNK);
     const center = key(pcx, pcz);
@@ -118,6 +130,7 @@ export class World {
 
     if (center !== this.lastCenter) {
       this.lastCenter = center;
+      for (const c of this.chunks.values()) if (c.plants) c.plants.visible = Math.hypot(c.cx - pcx, c.cz - pcz) <= this.plantDistance;
       // Unload chunks well outside the view distance (hysteresis avoids thrash).
       for (const [k, c] of this.chunks) {
         if (Math.hypot(c.cx - pcx, c.cz - pcz) > R + 2) this.unload(k, c);
@@ -172,9 +185,11 @@ export class World {
     group.position.set(r.cx * CHUNK, 0, r.cz * CHUNK);
     group.matrixAutoUpdate = false;
     group.updateMatrix();
+    let plants: THREE.Mesh | null = null;
     for (const pass of ['opaque', 'plants', 'water'] as const) {
       const mesh = this.buildMesh(r[pass], this.materials[pass]);
       if (mesh) {
+        if (pass === 'plants') { plants = mesh; mesh.visible = Math.hypot(r.cx - pcx, r.cz - pcz) <= this.plantDistance; }
         if (pass === 'water') mesh.renderOrder = 1;
         if (pass === 'opaque') mesh.layers.enable(LAYER_VOXEL_CASTER);
         group.add(mesh);
@@ -183,7 +198,7 @@ export class World {
     const signs = r.signs.map((s) => this.signFactory.build(s));
     for (const s of signs) this.group.add(s);
     this.group.add(group);
-    this.chunks.set(k, { cx: r.cx, cz: r.cz, blocks: r.blocks, group, signs });
+    this.chunks.set(k, { cx: r.cx, cz: r.cz, blocks: r.blocks, group, signs, plants });
     this.dispatch();
   }
 
