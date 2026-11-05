@@ -8,7 +8,8 @@ import { hash01 } from '../engine/noise';
 import { B, PARTIAL, SEA } from './blocks';
 import { C_AIR, castleHouse, type CastleHouse } from './castle';
 import { Grid, buildHut, surfaceFor, type OrcPlan } from './orcs';
-import { SITE_CASTLE, SITE_CROSSROAD, type Site } from './structures';
+import { LANDMARK_REACH } from './landmarks';
+import { LM, SITE_CASTLE, SITE_CROSSROAD, type Site } from './structures';
 import type { Terrain } from './terrain';
 
 export interface FrontCamp {
@@ -34,7 +35,7 @@ export interface FrontLayout {
 }
 
 /** Camp radius (levelled ground) and how far its plan reaches. */
-const CAMP_R = 11, CAMP_REACH = 17;
+const CAMP_R = 11, CAMP_REACH = 23;
 /** Each camp stands this far from the middle of the field. */
 const CAMP_OFF = 46;
 const FIELD_NAMES = ['Kızıl Ova', 'Kırık Mızrak Ovası', 'Kül Ovası', 'Yitik Ova', 'Kanlı Dere Ovası', 'Sessiz Ova'];
@@ -70,6 +71,9 @@ function build(t: Terrain): FrontLayout | null {
       const x = cs.x + (capital.x - cs.x) * f - sa0 * side, z = cs.z + (capital.z - cs.z) * f + ca0 * side;
       if (Math.hypot(x - cs.x, z - cs.z) < CAMP_OFF + 70 || Math.hypot(x - capital.x, z - capital.z) < CAMP_OFF + 80) continue;
       if (others.some((s) => Math.hypot(s.x - x, s.z - z) < CAMP_OFF + 40)) continue;
+      // Nor on a landmark: the field and both camps keep clear of their grounds.
+      const spots = [[x, z, 32], [x + ca0 * CAMP_OFF, z + sa0 * CAMP_OFF, CAMP_REACH], [x - ca0 * CAMP_OFF, z - sa0 * CAMP_OFF, CAMP_REACH]];
+      if (t.landmarks.near(x - 120, z - 120, x + 120, z + 120, 0).some((m) => spots.some(([sx, sz, r]) => Math.hypot(m.x - sx, m.z - sz) < r + (m.kind === LM.DRAGON_LAIR ? LANDMARK_REACH : 22)))) continue;
       const s0 = t.sample(x, z);
       let score = Math.abs(side) * 0.15 + ci * 60;
       for (const r of [0, 15, 30, CAMP_OFF]) for (let k = 0; k < (r ? 8 : 1); k++) {
@@ -78,10 +82,17 @@ function build(t: Terrain): FrontLayout | null {
         if (g.h < SEA + 1.5 || g.river > 0.05 || g.isle > 0 || g.lavaY > 0) score += 50;
         score += Math.abs(g.h - s0.h) * (r === CAMP_OFF ? 0.5 : 1) + g.crag * 10 + g.mount * 20;
       }
+      // The march from each camp's muster point to the field must be walkable: no steep steps on the way.
+      let prev = NaN;
+      for (let d = -(CAMP_OFF + CAMP_R + 4); d <= CAMP_OFF + CAMP_R + 4; d += 4) for (const w of [-6, 0, 6]) {
+        const g = t.sample(x + ca0 * d - sa0 * w, z + sa0 * d + ca0 * w);
+        if (w === 0) { if (prev === prev) score += Math.max(0, Math.abs(g.h - prev) - 1.2) * 5; prev = g.h; }
+        else score += Math.max(0, Math.abs(g.h - t.sample(x + ca0 * d, z + sa0 * d).h) - 2) * 1.5;
+      }
       if (score < bestScore) { bestScore = score; best = [x, z]; castle = cs; }
     }
   }
-  if (!best || !castle || bestScore > 200) return null;
+  if (!best || !castle || bestScore > 260) return null;
   const A = Math.atan2(capital.z - castle.z, capital.x - castle.x);
   const ca = Math.cos(A), sa = Math.sin(A);
   const [x, z] = [Math.round(best[0]), Math.round(best[1])];
@@ -134,11 +145,14 @@ function campPlan(t: Terrain, L: FrontLayout, C: FrontCamp, human: boolean): Orc
       g.pad(x, z, Y, k < 0.55 ? surface : k < 0.85 ? B.PATH : B.GRAVEL, 20);
       continue;
     }
-    const h = Math.floor(t.sample(x + 0.5, z + 0.5).h);
-    if (h < SEA) continue;
+    // A ramp in quarter steps out to the land (columns follow the sample at their corner, as the terrain does).
+    const hf = t.sample(x, z).h;
+    if (hf < SEA) continue;
     const s = Math.min(1, (r - CAMP_R - 1) / (CAMP_REACH - CAMP_R - 1));
-    const y = Math.round(Y + (h - Y) * s * s * (3 - 2 * s));
-    if (y !== h) g.pad(x, z, y, surface, Math.max(4, h - y + 3));
+    const v = Y + (hf - Y) * s * s * (3 - 2 * s);
+    const y = Math.floor(v), q = Math.round((v - y) * 4);
+    g.pad(x, z, y, surface, Math.max(4, Math.floor(hf) - y + 3));
+    if (q > 0) g.set(x, y + 1, z, q >= 4 ? surface : PARTIAL.get(surface)?.[q - 1] ?? C_AIR);
   }
 
   // --- the line facing the enemy: stakes (castle) or spiked logs (orcs), gaps to march out through
@@ -229,10 +243,18 @@ function campPlan(t: Terrain, L: FrontLayout, C: FrontCamp, human: boolean): Orc
 
 /** The ground fought over: scorched patches and broken spears left standing in the earth. */
 function fieldPlan(t: Terrain, L: FrontLayout): OrcPlan {
-  const R = 30;
+  const R = 30, LANE = CAMP_OFF - CAMP_REACH + 3;
   const Y = Math.floor(t.sample(L.x + 0.5, L.z + 0.5).h);
-  const g = new Grid(L.x, L.z, Y, R);
+  const g = new Grid(L.x, L.z, Y, LANE);
   const n = (x: number, y: number, z: number, k = 0) => hash01(x, y * 7 + 4300 + k, z, t.seed);
+  // No trees on the field or the way out to it from either camp (a cell of air above the ground masks them).
+  const ca = Math.cos(L.A), sa = Math.sin(L.A);
+  for (let z = L.z - LANE; z <= L.z + LANE; z++) for (let x = L.x - LANE; x <= L.x + LANE; x++) {
+    const dx = x + 0.5 - L.x, dz = z + 0.5 - L.z;
+    const across = -dx * sa + dz * ca;
+    if (Math.hypot(dx, dz) > R + 2 && Math.abs(across) > 16) continue;
+    g.set(x, Math.floor(t.sample(x, z).h) + 3, z, C_AIR);
+  }
   for (let k = 0; k < 26; k++) {
     const a = n(k, 1, 0) * Math.PI * 2, d = n(k, 2, 0) * (R - 3);
     const px = Math.round(L.x + Math.cos(a) * d * 1.1), pz = Math.round(L.z + Math.sin(a) * d * 0.8);
@@ -240,15 +262,17 @@ function fieldPlan(t: Terrain, L: FrontLayout): OrcPlan {
     for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
       if (Math.hypot(dx, dz) > r) continue;
       const x = px + dx, z = pz + dz;
-      const s = t.sample(x + 0.5, z + 0.5);
+      // Columns are generated from the sample at the block corner; keep their quarter-step top so the scar adds no pit.
+      const s = t.sample(x, z);
       if (s.h < SEA + 1 || s.river > 0.05) continue;
-      const h = Math.floor(s.h);
-      g.set(x, h, z, n(x, 4, z) < 0.5 ? B.ASH : n(x, 4, z) < 0.8 ? B.DIRT : B.GRAVEL);
-      g.set(x, h + 1, z, C_AIR);
+      const h = Math.floor(s.h), q = Math.round((s.h - h) * 4);
+      const top = n(x, 4, z) < 0.5 ? B.ASH : n(x, 4, z) < 0.8 ? B.DIRT : B.GRAVEL;
+      g.set(x, h, z, top);
+      g.set(x, h + 1, z, q <= 0 ? C_AIR : q >= 4 ? top : PARTIAL.get(top)![q - 1]);
     }
     // Now and then a spear (or a snapped banner pole) still stuck in the ground.
     if (n(k, 5, 0) < 0.45) {
-      const s = t.sample(px + 0.5, pz + 0.5);
+      const s = t.sample(px, pz);
       if (s.h >= SEA + 1 && s.river <= 0.05) {
         const h = Math.floor(s.h);
         g.set(px, h + 1, pz, n(k, 6, 0) < 0.5 ? B.SPRUCE_LOG : B.OAK_LOG);
@@ -259,7 +283,7 @@ function fieldPlan(t: Terrain, L: FrontLayout): OrcPlan {
   }
   return {
     ox: g.ox, oy: g.oy, oz: g.oz, w: g.w, h: g.h, d: g.w, cells: g.cells,
-    half: 0, cx: L.x, cz: L.z, floorY: Y, texts: [], clearMask: false,
+    half: 0, cx: L.x, cz: L.z, floorY: Y, texts: [], clearMask: true,
   };
 }
 

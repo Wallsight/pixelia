@@ -18,6 +18,7 @@ import { angleTo, pick, rand, TAU } from './util';
 
 export interface FrontHost extends WarHost {
   announce(kicker: string, title: string, sub: string): void;
+  shove(c: Creature, dx: number, dz: number): void;
 }
 
 /** 0: the castle's house, 1: the orcs. */
@@ -37,8 +38,10 @@ export interface FrontOrder {
   /** Knocked down once: limping back to camp. */
   back: boolean;
   scan: number;
-  /** Seconds walking into a wall (a ledge, a stake): such fighters are dropped. */
+  /** Seconds walking into a wall (a ledge, a stake): such fighters try a way round, and are dropped in the end. */
   stuck: number;
+  /** A way round: seconds left on it, and its heading. */
+  detour: number; dyaw: number;
 }
 
 type Phase = 'none' | 'form' | 'volley' | 'charge' | 'won';
@@ -50,15 +53,21 @@ interface Battle {
   away: number;
   start: [number, number];
   winner: Side | null;
+  /** The day's fortune: each side's blows count for a little more or less. */
+  luck: [number, number];
 }
 
 /** Player distance from the field at which the front comes alive (and goes quiet again). */
 const ON = 170, OFF = 210;
 const CAMP_CREW: Array<[FighterKind, FighterKind]> = [['soldier', 'orc'], ['soldier', 'orc'], ['bowman', 'orcspear'], ['soldier', 'orc'], ['bowman', 'orcspear'], ['captain', 'wolf']];
 const LINE: Record<Side, Array<[FighterKind, number]>> = {
-  0: [['soldier', 12], ['bowman', 8], ['captain', 1]],
+  0: [['soldier', 14], ['bowman', 8], ['captain', 1]],
   1: [['orc', 14], ['orcspear', 6], ['wolf', 3], ['shaman', 1]],
 };
+/** Front fighters jump down steps this deep (camp pads and field edges can be steep). */
+const DROP = 4.5;
+/** Damage dealt in the big battle, against the usual. */
+const BATTLE_DMG = 0.5;
 const SKIRMISH: Record<Side, FighterKind[]> = { 0: ['soldier', 'soldier', 'bowman'], 1: ['orc', 'orc', 'orcspear', 'wolf'] };
 
 const HUMAN_CAMP = ['Ateşi canlı tutun.', 'Orklar bu gece de davul çalıyor.', 'Şafakta ne olacak dersin?', 'Kalkanını sağlam tut.', 'Evde ekmek kokusu...', 'Nöbet sende.'];
@@ -82,7 +91,7 @@ export class FrontDirector {
   private wasNight = false;
   private drumT = 3;
   private talkT = 6;
-  readonly battle: Battle = { phase: 'none', t: 0, away: 0, start: [0, 0], winner: null };
+  readonly battle: Battle = { phase: 'none', t: 0, away: 0, start: [0, 0], winner: null, luck: [1, 1] };
   /** Last battle's winner (saved per world), and the game day it was fought. */
   last: { winner: Side; day: number } | null = null;
   private storeKey: string;
@@ -143,6 +152,7 @@ export class FrontDirector {
       }
     }
     this.runBattle(dt);
+    if (this.active) this.spread(dt);
     if (!this.active) {
       if (was) this.skirmishLeft = 0;
       return;
@@ -224,7 +234,7 @@ export class FrontDirector {
     }
     if (!c) return null;
     const f = c.fighter!;
-    f.front = { side: s, role, tx, tz, yaw, ranged: fighterStats(kind).reach > 4, back: false, scan: rand(0, 0.5), stuck: 0 };
+    f.front = { side: s, role, tx, tz, yaw, ranged: fighterStats(kind).reach > 4, back: false, scan: rand(0, 0.5), stuck: 0, detour: 0, dyaw: 0 };
     this.side[s].push(c);
     return c;
   }
@@ -281,6 +291,7 @@ export class FrontDirector {
     this.battle.phase = 'form';
     this.battle.t = 0;
     this.battle.winner = null;
+    this.battle.luck = [rand(0.8, 1.2), rand(0.8, 1.2)];
     this.battle.away = this.active ? 0 : rand(120, 180);
     this.host.announce('BÜYÜK SAVAŞ', `${house} ile ${horde} çarpışıyor!`, `${this.L!.name} · haritada ⚔`);
     if (this.skirmishLeft > 0) this.endSkirmish();
@@ -430,7 +441,7 @@ export class FrontDirector {
     c.flap += dt * 10;
     c.glow = f.flash * 4;
 
-    if (o.stuck > 4) return false;
+    if (o.stuck > 12) return false;
     if (o.back) return this.goBack(c, o, dt);
 
     // Fight whoever of the other side is near (camp crews only defend their camp).
@@ -487,6 +498,9 @@ export class FrontDirector {
   private fight(c: Creature, foe: Creature, dt: number): boolean {
     const f = c.fighter!, k = fighterStats(f.kind);
     const d = Math.hypot(foe.x - c.x, foe.z - c.z);
+    // The big battle is a long grind, not a quick brawl.
+    const o = f.front!;
+    const dmg = k.dmg * (o.role === 'battle' ? BATTLE_DMG * this.battle.luck[o.side] : 1);
     if (k.reach > 4) {
       if (d < 4) {
         // Too close for a bow: step back.
@@ -499,7 +513,7 @@ export class FrontDirector {
       if (f.cool <= 0) {
         f.cool = k.cool * rand(0.9, 1.3);
         c.tail = 1.4;
-        this.night.cast(c, foe, f.kind === 'shaman' ? 'bolt' : 'arrow', k.dmg * rand(0.7, 1.1));
+        this.night.cast(c, foe, f.kind === 'shaman' ? 'bolt' : 'arrow', dmg * rand(0.7, 1.1));
       }
       return true;
     }
@@ -509,16 +523,48 @@ export class FrontDirector {
       f.cool = k.cool * rand(0.85, 1.2);
       c.flap = 0; c.flapAmp = 1.3;
       this.host.sound('swing', c);
-      this.night.hit(foe, k.dmg * rand(0.7, 1.2), c);
+      this.night.hit(foe, dmg * rand(0.7, 1.2), c);
     }
     return true;
   }
 
+  /** Fighters standing in one spot drift apart instead of sharing it. */
+  private spread(dt: number): void {
+    const all = [...this.side[0], ...this.side[1]].filter((c) => c.dying === 0);
+    const R = 0.85, push = Math.min(1, dt * 4);
+    for (let i = 0; i < all.length; i++) {
+      const a = all[i];
+      for (let j = i + 1; j < all.length; j++) {
+        const b = all[j];
+        let dx = a.x - b.x, dz = a.z - b.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 >= R * R) continue;
+        const d = Math.sqrt(d2);
+        if (d < 1e-3) { const t = Math.random() * Math.PI * 2; dx = Math.sin(t); dz = Math.cos(t); } else { dx /= d; dz /= d; }
+        const k = (R - d) * 0.5 * push;
+        this.host.shove(a, dx * k, dz * k);
+        this.host.shove(b, -dx * k, -dz * k);
+      }
+    }
+  }
+
   /** walkToward, counting the time spent stuck. */
   private walk(c: Creature, tx: number, tz: number, speed: number, dt: number): 'moving' | 'arrived' | 'blocked' {
-    const r = this.host.walkToward(c, tx, tz, speed, dt);
     const o = c.fighter!.front!;
-    o.stuck = r === 'blocked' ? o.stuck + dt : 0;
+    // Off on a way round a ledge for a moment, then try straight again.
+    if (o.detour > 0) {
+      o.detour -= dt;
+      const r = this.host.walkToward(c, c.x + Math.sin(o.dyaw) * 3, c.z + Math.cos(o.dyaw) * 3, speed, dt, DROP);
+      if (r === 'blocked') { o.stuck += dt; o.dyaw += Math.PI / 2; }
+      return 'moving';
+    }
+    const r = this.host.walkToward(c, tx, tz, speed, dt, DROP);
+    if (r !== 'blocked') { if (r === 'moving' && o.stuck > 0) o.stuck = Math.max(0, o.stuck - dt * 0.5); return r; }
+    o.stuck += dt;
+    if (o.stuck > 0.6) {
+      o.detour = rand(0.8, 1.8);
+      o.dyaw = Math.atan2(tx - c.x, tz - c.z) + (Math.random() < 0.5 ? 1 : -1) * rand(1.6, 2.6);
+    }
     return r;
   }
 
@@ -541,8 +587,17 @@ export class FrontDirector {
     return `${L.name} @${L.x},${L.z} ${this.active ? 'active' : 'quiet'} d=${Math.round(Math.hypot(L.x - this.px, L.z - this.pz))} | camp ${count(0, 'camp')}/${count(1, 'camp')}`
       + ` skirmish ${up(0, 'skirmish')}/${count(0, 'skirmish')} v ${up(1, 'skirmish')}/${count(1, 'skirmish')} (${Math.round(this.skirmishLeft)}s, next ${Math.round(this.skirmishT)}s)`
       + ` | battle ${this.battle.phase} t=${Math.round(this.battle.t)} ${up(0, 'battle')}/${count(0, 'battle')} v ${up(1, 'battle')}/${count(1, 'battle')}`
+      + ` | crowd ${this.crowd()}`
       + ` | last ${this.last ? (this.last.winner ? 'orcs' : 'house') + ' day ' + this.last.day : '-'}`
       + ` | out ${[0, 1].map((s) => this.side[s as Side].filter((c) => c.fighter!.front!.role !== 'camp').map((c) => `${c.fighter!.kind[0]}${Math.round(c.x)},${Math.round(c.z)}${c.fighter!.down > 0 ? 'v' : c.fighter!.front!.back ? '<' : ''}`).join(' ')).join(' | ')}`;
+  }
+
+  /** Pairs of standing fighters closer than half a block. */
+  private crowd(): number {
+    const all = [...this.side[0], ...this.side[1]].filter((c) => c.dying === 0);
+    let n = 0;
+    for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) if (Math.hypot(all[i].x - all[j].x, all[i].z - all[j].z) < 0.5) n++;
+    return n;
   }
 
   /** Dev: 'skirmish' starts one now, 'battle' sounds the horn, 'tp' gives the camp and field spots. */

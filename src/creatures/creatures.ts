@@ -324,7 +324,8 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
     const a = this.solid(ix, f, iz);
     if (a < 0) return NaN;
     if (a) {
-      if (this.solid(ix, f + 1, iz)) return NaN;
+      // Up a ramp: from a partial block onto the next step (callers cap the rise).
+      if (this.solid(ix, f + 1, iz)) return this.solid(ix, f + 2, iz) ? NaN : this.surfaceOf(ix, f + 1, iz);
       return this.surfaceOf(ix, f, iz);
     }
     for (let yy = f - 1; yy >= f - 3; yy--) {
@@ -1065,7 +1066,15 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
     c.flapAmp += (0 - c.flapAmp) * Math.min(1, dt * 6);
   }
 
-  walkToward(c: Creature, tx: number, tz: number, speed: number, dt: number): 'moving' | 'arrived' | 'blocked' {
+  /** Nudge a creature sideways (crowding), only onto ground it could walk to. */
+  shove(c: Creature, dx: number, dz: number): void {
+    const g = this.groundAt(c, c.x + dx, c.z + dz);
+    if (!Number.isFinite(g) || g - c.y > 1.05 || c.y - g > 1.5) return;
+    c.x += dx; c.z += dz;
+  }
+
+  /** maxDrop: the deepest step down taken (front fighters jump down a little further). */
+  walkToward(c: Creature, tx: number, tz: number, speed: number, dt: number, maxDrop = 3): 'moving' | 'arrived' | 'blocked' {
     const dx = tx - c.x, dz = tz - c.z, d = Math.hypot(dx, dz);
     if (d < 0.45) { this.idle(c, dt); return 'arrived'; }
     let want = Math.atan2(dx, dz);
@@ -1079,7 +1088,7 @@ export class Creatures implements NpcHost, NightHost, WyrmHost, WarHost {
     for (const off of [0, 0.7, -0.7, 1.4, -1.4]) {
       const yaw = c.yaw + angleTo(c.yaw, want + off) * Math.min(1, dt * 6);
       const probe = this.groundAt(c, c.x + Math.sin(yaw) * 0.45, c.z + Math.cos(yaw) * 0.45);
-      if (!Number.isFinite(probe) || probe - c.y > 1.05 || c.y - probe > 3) continue;
+      if (!Number.isFinite(probe) || probe - c.y > 1.05 || c.y - probe > maxDrop) continue;
       c.yaw = yaw;
       const step = Math.min(d, speed * dt * Math.max(0.2, Math.cos(angleTo(c.yaw, want))));
       c.x += Math.sin(c.yaw) * step; c.z += Math.cos(c.yaw) * step;

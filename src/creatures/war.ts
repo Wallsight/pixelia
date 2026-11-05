@@ -104,7 +104,7 @@ interface Siege {
 }
 
 export interface WarHost {
-  walkToward(c: Creature, tx: number, tz: number, speed: number, dt: number): 'moving' | 'arrived' | 'blocked';
+  walkToward(c: Creature, tx: number, tz: number, speed: number, dt: number, maxDrop?: number): 'moving' | 'arrived' | 'blocked';
   idle(c: Creature, dt: number): void;
   say(c: Creature, text: string, sec?: number): void;
   sound(ev: NightSound, c: Creature): void;
