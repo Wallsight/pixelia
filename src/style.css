@@ -229,6 +229,19 @@ body.menu #gold, body.map-open #gold, body.menu #interact { visibility: hidden; 
 body.touch #quests { top: max(56px, calc(env(safe-area-inset-top) + 52px)); font-size: 11px; max-width: 40vw; }
 body.menu #quests, body.map-open #quests, body.menu #quest-dialog { visibility: hidden; }
 
+/* Records on the pause screen. */
+#records { margin: 14px 0 4px; text-align: left; }
+#records.hidden { display: none; }
+#records h2 { margin: 0 0 8px; font-size: 15px; letter-spacing: 3px; color: #ffd77a; text-align: center; }
+#records .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; }
+#records .stat { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; color: #c9bfd8; }
+#records .stat b { color: #f4ead8; }
+#records .board { width: 100%; margin-top: 10px; border-collapse: collapse; font-size: 13px; }
+#records .board th { color: #8f84a6; font-weight: normal; text-align: left; padding: 2px 4px; }
+#records .board td { padding: 2px 4px; color: #e8e0f0; }
+#records .board tr.me td { color: #ffd77a; }
+#records .hint { margin: 8px 0 0; font-size: 11px; color: #8f84a6; text-align: center; }
+
 /* The interact prompt (keyboard), just under the crosshair. */
 #interact {
   position: fixed; left: 50%; top: calc(50% + 34px); transform: translateX(-50%); z-index: 5; pointer-events: none;

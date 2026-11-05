@@ -11,7 +11,7 @@ import { Terrain, BIOME, BIOME_NAMES_TR, type ColumnSample } from './world/terra
 import { SEA } from './world/blocks';
 import { PlayerController, canPointerLock } from './player/controller';
 import { WorldMap } from './ui/map';
-import { Discovery } from './ui/discovery';
+import { Discovery, FOG_CELL } from './ui/discovery';
 import { Creatures } from './creatures/creatures';
 import { TowerBeacon } from './render/beacon';
 import { Soundscape } from './audio/soundscape';
@@ -21,6 +21,7 @@ import { DoorDirector } from './render/doors';
 import { GoldDirector } from './game/gold';
 import { Interact } from './ui/interact';
 import { QuestDirector } from './game/quests';
+import { Records } from './ui/records';
 import { Subtitle } from './ui/subtitle';
 import { PartyChat } from './ui/partychat';
 import { Compass } from './ui/compass';
@@ -208,8 +209,14 @@ document.body.classList.add('menu'); // HUD stays hidden behind the menu until p
 debug.classList.toggle('hidden', !showDebug);
 
 /** Shows or hides the pause overlay once the player starts, pauses or resumes. */
+// Records of this world (and the others played here), on the pause screen.
+const records = new Records(SEED, startBtn.parentElement!, startBtn.nextElementSibling);
+const recordNow = () => ({
+  gold: gold.stats.gold, quests: quests.done, found: discovery.found.size, area: (discovery.seen.size * FOG_CELL * FOG_CELL) / 1e6,
+});
 function setActive(active: boolean): void {
   overlay.classList.toggle('hidden', active);
+  records.show(!active && spawned, recordNow);
   document.body.classList.toggle('menu', !active);
   touch?.show(active && touchMode);
   if (active) sound.start(); else sound.engine.suspend();
@@ -478,6 +485,7 @@ function step(): void {
           player.yaw = (yaw * Math.PI) / 180; player.pitch = (pitch * Math.PI) / 180;
           return 'ok';
         };
+        (window as unknown as Record<string, unknown>).__pause = () => { pauseUnlocked(); return 'paused'; };
         (window as unknown as Record<string, unknown>).__gold = () => gold.info(player.position.x, player.position.z);
         // Dev: offer a task from the nearest board; 'yes' accepts the open offer.
         (window as unknown as Record<string, unknown>).__quest = (what = '') => { if (what === 'yes') { quests.accept(); return quests.active.map((q) => `${q.kind} ${q.title} @${Math.round(q.x)},${Math.round(q.z)} ${q.have}/${q.need}${q.ready ? ' READY' : ''}`).join(' | '); } return quests.dev(player.position.x, player.position.z, what); };
@@ -529,6 +537,11 @@ function step(): void {
     doors.update(dt, player.position.x, player.position.z);
     gold.update(dt, player.position.x, player.position.y, player.position.z);
     quests.update(dt, player.position.x, player.position.y, player.position.z);
+    if (player.locked) {
+      records.time += dt;
+      // Now and then, so a closed tab keeps most of it.
+      if (Math.floor(records.time / 30) !== Math.floor((records.time - dt) / 30)) records.save(recordNow());
+    }
     interact.update(player.position.x, player.position.y, player.position.z, player.locked && !worldMap.open);
     camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
     sound.update(dt, {
