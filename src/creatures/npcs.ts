@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { hash01 } from '../engine/noise';
 import { LM, SITE_CASTLE, SITE_CITY, SITE_ORC, SITE_VILLAGE, pointAlong, polylineLength, type Site } from '../world/structures';
 import { castleHouse } from '../world/castle';
+import { frontLayout } from '../world/front';
 import { villageLayout, type House, type Layout, type Spot } from '../world/village';
 import type { Terrain } from '../world/terrain';
 import type { Creature } from './creatures';
@@ -155,6 +156,12 @@ function gossipFor(t: Terrain, site: Site): Gossip[] {
   if (oba) {
     const d = Math.hypot(oba.x - site.x, oba.z - site.z);
     out.push({ text: `${direction(oba.x - site.x, oba.z - site.z)}, ${Math.round(d / 50) * 50} adım ötede bir ork obası var: ${oba.name}. Kurtları varmış, yaklaşma.`, id: `s:${oba.id}` });
+  }
+  // The war front, where the castle's house and the orcs fight every dawn.
+  const front = frontLayout(t);
+  if (front && Math.hypot(front.x - site.x, front.z - site.z) < 1400) {
+    const d = Math.hypot(front.x - site.x, front.z - site.z);
+    out.push({ text: `${direction(front.x - site.x, front.z - site.z)}, ${Math.round(d / 50) * 50} adım ötede ${front.name} var. ${front.house.name} ile orklar her şafak orada savaşırmış!`, id: null });
   }
   // Everyone has heard of the great dragon.
   const lair = t.landmarks.lair();

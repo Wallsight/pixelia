@@ -116,6 +116,8 @@ const legendBoard = (() => {
 })();
 creatures.npcs.news = () => {
   const n = legendBoard?.foundCount ?? 0;
+  const war = creatures.front.news();
+  if (war && Math.random() < 0.4) return war;
   if (Math.random() < 0.5) return null;
   return n ? `Bir gezgin ${n} efsaneyi buldu! Panoya bakın!` : 'Efsaneler panosu meydanda, gezginler buyursun!';
 };
@@ -132,7 +134,7 @@ creatures.wyrm.onSpeak = (who, text, sec, asleep) => subtitle.show(who, text, se
 const partyChat = new PartyChat();
 creatures.onPartyChat = (party, who, text) => partyChat.post(party, who, text);
 creatures.onAnnounce = (kicker, title, sub) => discovery.announce(kicker, title, sub);
-worldMap.markers = () => creatures.rare.markers();
+worldMap.markers = () => [...creatures.rare.markers(), ...creatures.front.markers()];
 const compass = new Compass();
 // Always on screen (desktop): the map key, clickable too.
 const mapHint = document.createElement('button');
@@ -385,6 +387,8 @@ function step(): void {
         (window as unknown as Record<string, unknown>).__raid = () => creatures.watch.devRaid();
         (window as unknown as Record<string, unknown>).__rare = (near: boolean | 'duel' = false, hp = 0) => creatures.rare.devStart(near, hp);
         (window as unknown as Record<string, unknown>).__rinfo = () => creatures.rare.info();
+        (window as unknown as Record<string, unknown>).__front = (what = 'tp') => creatures.front.dev(what);
+        (window as unknown as Record<string, unknown>).__finfo = () => creatures.front.info();
         (window as unknown as Record<string, unknown>).__map = () => { toggleMap(); return worldMap.open; };
         (window as unknown as Record<string, unknown>).__orda = (capital = true) => creatures.orcs.nearest(player.position.x, player.position.z, capital);
         (window as unknown as Record<string, unknown>).__lookOrc = (job: string, dist = 5, up = 1.6) => {
@@ -474,7 +478,7 @@ function step(): void {
   shadows?.render(renderer, scene, camera.position, daynight.lightDir, daynight.shadowStrength);
   renderer.render(scene, camera);
   worldMap.draw(player.position.x, player.position.z, player.yaw);
-  compass.update(player.yaw, player.position.x, player.position.z, creatures.rare.markers(), creatures.rare.nextIn);
+  compass.update(player.yaw, player.position.x, player.position.z, [...creatures.rare.markers(), ...creatures.front.markers()], creatures.rare.nextIn);
 
   frames++;
   fpsTime += dt;

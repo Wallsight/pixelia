@@ -14,6 +14,7 @@ import type { Post } from './war';
 import type { OrcJob } from './orcs';
 import type { WatchPost } from './watch';
 import type { RareEvent } from './rare';
+import type { FrontOrder } from './front';
 import { BATTLE_CALLS, CAMP_BANTER, DOWN_CALLS, ROAD_BANTER, VICTORY_CALLS, exchange } from './banter';
 import { angleTo, pick, rand, TAU } from './util';
 
@@ -71,6 +72,8 @@ export interface Fighter {
   raid: { x: number; z: number; r: number } | null;
   /** Besieging a castle. */
   siege: SiegeOrder | null;
+  /** Fighting at the war front. */
+  front: FrontOrder | null;
   death: Death;
   /** Next idle noise. */
   voice: number;
@@ -252,7 +255,7 @@ export class NightDirector {
     const k = KINDS[kind];
     c.fighter = {
       kind, hero: ALLIES.includes(kind) || ORCS.includes(kind), hp: k.hp, max: k.hp, foe: null, cool: rand(0, 1), t: rand(0, 3), down: 0, flash: 0,
-      stone: false, party: null, garrison: null, orc: null, watch: null, rare: null, slot: 0, raid: null, siege: null, death: k.death, voice: rand(3, 12),
+      stone: false, party: null, garrison: null, orc: null, watch: null, rare: null, slot: 0, raid: null, siege: null, front: null, death: k.death, voice: rand(3, 12),
     };
     if (kind === 'wisp' || kind === 'ghost') { c.y = col[0] + (kind === 'wisp' ? rand(0.8, 2) : 0.3); c.ground = col[0]; }
     return c;
@@ -664,7 +667,7 @@ export class NightDirector {
     if (f.hero) {
       f.down = 7;
       if (this.near(target)) {
-        if (f.garrison || f.watch || f.orc) this.host.say(target, pick(['Ahh!', 'Kalkanım...', 'Yaralandım!']), 2);
+        if (f.garrison || f.watch || f.orc || f.front) this.host.say(target, pick(['Ahh!', 'Kalkanım...', 'Yaralandım!']), 2);
         else this.host.partySay(target, f.party?.name ?? f.rare?.partyName ?? 'Grup', pick(Math.random() < 0.5 ? DOWN : DOWN_CALLS));
       }
       return;

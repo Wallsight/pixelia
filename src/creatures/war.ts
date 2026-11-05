@@ -257,8 +257,12 @@ export class WarDirector {
 
   // ------------------------------------------------------------ garrison
 
+  /** True for a castle that lost the last battle at the front: it keeps fewer soldiers about. */
+  thinned: ((site: Site) => boolean) | null = null;
+
   private onShift(g: Garrison, p: Post): boolean {
     if (p.shift === 'siege') return !!g.siege && g.siege.phase !== 'over';
+    if (p.i % 2 === 1 && (p.duty === 'drill' || p.duty === 'spar' || p.duty === 'archery' || p.duty === 'patrol') && this.thinned?.(g.site)) return false;
     return p.shift === 'always' || (p.shift === 'night') === g.night;
   }
 

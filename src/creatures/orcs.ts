@@ -170,7 +170,11 @@ export class OrcDirector {
 
   // ------------------------------------------------------------ camp
 
+  /** True for the capital after it lost the last battle at the front: fewer warriors about. */
+  thinned: ((site: Site) => boolean) | null = null;
+
   private onShift(g: Camp, j: OrcJob): boolean {
+    if (j.i % 2 === 1 && (j.job === 'crowd' || j.job === 'throw' || j.job === 'guard' || j.job === 'rack') && this.thinned?.(g.site)) return false;
     return j.shift === 'always' || (j.shift === 'night') === g.night;
   }
 

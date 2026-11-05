@@ -26,7 +26,7 @@ export class WorldMap {
   private fogKey = '';
   private legend: HTMLDivElement;
   /** Live world events to mark (rare creatures), set by main. */
-  markers: () => Array<{ x: number; z: number; label: string; done: boolean }> = () => [];
+  markers: () => Array<{ x: number; z: number; label: string; done: boolean; icon?: string }> = () => [];
 
   constructor(seed: number, private terrain: Terrain, private disc: Discovery) {
     this.el = document.createElement('div');
@@ -188,9 +188,9 @@ export class WorldMap {
       const pulse = m.done ? 1 : 1 + 0.18 * Math.sin(performance.now() / 180);
       g.font = `bold ${Math.round(20 * dpr * pulse)}px "Cascadia Mono", Consolas, monospace`;
       g.fillStyle = '#2b1d33';
-      g.fillText('☠', X + dpr, Y + 7 * dpr);
+      g.fillText(m.icon ?? '☠', X + dpr, Y + 7 * dpr);
       g.fillStyle = m.done ? '#9a90a8' : '#ff5a4a';
-      g.fillText('☠', X, Y + 6 * dpr);
+      g.fillText(m.icon ?? '☠', X, Y + 6 * dpr);
       g.font = `bold ${font}px "Cascadia Mono", Consolas, monospace`;
       g.fillStyle = '#2b1d33';
       g.fillText(m.label, X + dpr, Y - 11 * dpr);

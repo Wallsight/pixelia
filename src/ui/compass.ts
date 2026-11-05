@@ -7,7 +7,7 @@ const W = 420, H = 92, STRIP = 30;
 const LABELS: Array<[number, string]> = [[0, 'K'], [45, 'KD'], [90, 'D'], [135, 'GD'], [180, 'G'], [225, 'GB'], [270, 'B'], [315, 'KB']];
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 
-export interface CompassMark { x: number; z: number; label: string; done: boolean }
+export interface CompassMark { x: number; z: number; label: string; done: boolean; /** Default: a skull. */ icon?: string }
 
 export class Compass {
   private canvas = document.createElement('canvas');
@@ -80,9 +80,9 @@ export class Compass {
       const x = Math.abs(rel) > Math.PI / 2 ? (rel > 0 ? W - 10 : 10) : toX(b);
       g.font = 'bold 16px "Cascadia Mono", Consolas, monospace';
       g.fillStyle = '#000';
-      g.fillText('☠', x + 1, STRIP / 2 + 1);
+      g.fillText(m.icon ?? '☠', x + 1, STRIP / 2 + 1);
       g.fillStyle = '#ff5a4a';
-      g.fillText('☠', x, STRIP / 2);
+      g.fillText(m.icon ?? '☠', x, STRIP / 2);
     }
     if (!near) return;
 
