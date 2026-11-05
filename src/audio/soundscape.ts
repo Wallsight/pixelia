@@ -170,8 +170,10 @@ export class Soundscape {
   }
 
   /** Discovery / rumour jingles. */
-  jingle(kind: 'found' | 'rumor'): void {
-    if (kind === 'found') this.play(null, 'sfx', 0, 0.5, 0, 0.9, (o, t) => X.chime(this.engine, o, t, [784, 988, 1175, 1568], 0.11));
+  jingle(kind: 'found' | 'rumor' | 'coin' | 'chest'): void {
+    if (kind === 'coin') this.play(null, 'sfx', 0, 0.35, 0, 0.6, (o, t) => X.chime(this.engine, o, t, [1568, 2093], 0.06, 0.12));
+    else if (kind === 'chest') this.play(null, 'sfx', 0, 0.5, 0, 0.8, (o, t) => X.chime(this.engine, o, t, [523, 659, 784, 1047, 1319, 1568], 0.07));
+    else if (kind === 'found') this.play(null, 'sfx', 0, 0.5, 0, 0.9, (o, t) => X.chime(this.engine, o, t, [784, 988, 1175, 1568], 0.11));
     else this.play(null, 'sfx', 0, 0.5, 0, 0.7, (o, t) => X.chime(this.engine, o, t, [659, 880], 0.16, 0.16));
   }
 

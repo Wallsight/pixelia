@@ -18,6 +18,8 @@ import { Soundscape } from './audio/soundscape';
 import { LegendBoard } from './render/legend-board';
 import { EldritchDirector } from './render/eldritch';
 import { DoorDirector } from './render/doors';
+import { GoldDirector } from './game/gold';
+import { Interact } from './ui/interact';
 import { Subtitle } from './ui/subtitle';
 import { PartyChat } from './ui/partychat';
 import { Compass } from './ui/compass';
@@ -150,6 +152,10 @@ mapHint.addEventListener('click', (e) => {
   if (player.locked || worldMap.open) toggleMap();
 });
 document.body.appendChild(mapHint);
+// The purse: gold picked up along the roads, from chests and for tasks done.
+const goldHud = document.createElement('div');
+goldHud.id = 'gold';
+document.body.appendChild(goldHud);
 creatures.wyrm.onSound = (ev, at, text) => sound.wyrm(ev, at, text);
 creatures.wyrm.context = () => ({ found: legendBoard?.foundCount ?? 0, flying: player.flying });
 // Its body is solid: no walking through it, but you can climb onto its back.
@@ -247,6 +253,26 @@ const setTouchLayout = (on: boolean): void => {
   document.body.classList.toggle('touch', on);
   worldMap.setTouch(on);
 };
+// E (or the touch button): open a chest, talk to someone with a task...
+const interact = new Interact(TOUCH);
+if (touch) touch.el.appendChild(interact.button);
+// Gold lying about the world.
+const gold = new GoldDirector(terrain, world, env, SHADOWS);
+scene.add(gold.group);
+const showGold = (bump: boolean): void => {
+  goldHud.innerHTML = `<span class="coin"></span>${gold.stats.gold}`;
+  if (bump) { goldHud.classList.remove('bump'); void goldHud.offsetWidth; goldHud.classList.add('bump'); }
+};
+showGold(false);
+gold.onGold = (added, _total, kind, where) => {
+  showGold(true);
+  sound.jingle(kind === 'pouch' ? 'coin' : 'chest');
+  if (kind === 'chest') discovery.notice('HAZİNE', `+${added} altın · ${where}`);
+};
+interact.add((px, py, pz) => {
+  const c = gold.chestNear(px, py, pz);
+  return c && { x: c.x, y: c.y, z: c.z, label: 'Sandığı aç', act: c.open };
+});
 if (touch) {
   touch.onMapPan = (dx, dy) => worldMap.pan(dx, dy);
   touch.onMapZoom = (dir) => worldMap.zoom(dir);
@@ -293,6 +319,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyT' && player.locked) toggleTime();
   if (e.code === 'KeyM' && (player.locked || worldMap.open)) toggleMap();
   if (e.code === 'KeyC' && worldMap.open) worldMap.recenter();
+  if (e.code === 'KeyE' && player.locked && !worldMap.open) interact.trigger();
   // N: sound on/off, B: music on/off.
   if (e.code === 'KeyN' && player.locked) toggleSound();
   if (e.code === 'KeyB' && player.locked) {
@@ -437,6 +464,8 @@ function step(): void {
           player.yaw = (yaw * Math.PI) / 180; player.pitch = (pitch * Math.PI) / 180;
           return 'ok';
         };
+        (window as unknown as Record<string, unknown>).__gold = () => gold.info(player.position.x, player.position.z);
+        (window as unknown as Record<string, unknown>).__interact = () => { const c = gold.chestNear(player.position.x, player.position.y, player.position.z); const was = interact.label; interact.trigger(); return `locked=${player.locked} prompt=${was} chest=${c ? 'yes' : 'no'} at ${player.position.x.toFixed(1)},${player.position.y.toFixed(1)},${player.position.z.toFixed(1)}`; };
         (window as unknown as Record<string, unknown>).__sound = () => { sound.start(); return sound.stats(); };
         (window as unknown as Record<string, unknown>).__meter = () => sound.engine.meter();
         (window as unknown as Record<string, unknown>).__sfx = (n: string) => sound.demo(n);
@@ -482,6 +511,8 @@ function step(): void {
     camera.getWorldDirection(camFwd);
     eldritch.update(dt, camera.position, camFwd, daynight.night, focusSample);
     doors.update(dt, player.position.x, player.position.z);
+    gold.update(dt, player.position.x, player.position.y, player.position.z);
+    interact.update(player.position.x, player.position.y, player.position.z, player.locked && !worldMap.open);
     camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
     sound.update(dt, {
       camera, forward: camFwd, up: camUp, pos: player.position, vel: player.velocity,
